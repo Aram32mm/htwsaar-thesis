@@ -1,17 +1,39 @@
-# latex-action von Deutschsprachige Anwendervereinigung TeX e.V.
+# GitHub Actions workflow to build LaTeX PDF using dante-ev/latex-action
+# Maintained by Deutschsprachige Anwendervereinigung TeX e.V.
 # https://github.com/dante-ev/latex-action
-name: Build LaTeX document
-on:  
+
+name: Build LaTeX Document
+
+on:
   push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: # allows manual triggering
   schedule:
-    - cron: '0 0 2 * *'
+    - cron: '0 0 2 * *'  # Run monthly on the 2nd at 00:00
+
 jobs:
   build_latex:
+    name: Compile LaTeX PDF
     runs-on: ubuntu-latest
+
     steps:
-      - name: Set up Git repository
-        uses: actions/checkout@v2
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
       - name: Compile LaTeX document
-        uses: dante-ev/latex-action@latest
+        uses: dante-ev/latex-action@v2
         with:
           root_file: htwsaar-i-mst-vorlage.tex
+          latexmk_use_xelatex: true # optional — only if you use xelatex
+          extra_system_packages: "ghostscript"
+
+      - name: Rename compiled PDF
+        run: mv htwsaar-i-mst-vorlage.pdf thesis_mendez_gomez_jose_2025.pdf
+
+      - name: Upload Compiled PDF as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: thesis-pdf
+          path: thesis_mendez_gomez_jose_2025.pdf
