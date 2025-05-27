@@ -1,5 +1,4 @@
-# thesis [![Build LaTeX document](https://github.com/Aram32mm/htwsaar-thesis/actions/workflows/build_pdf.yml/badge.svg)]([https://github.com/systemtechniklabor/htwsaar-i-mst-vorlage/actions/workflows/build_pdf.yml](https://github.com/Aram32mm/htwsaar-thesis/actions/workflows/build_pdf.yml))
-
+# thesis [![Build LaTeX document](https://github.com/Aram32mm/htwsaar-thesis/actions/workflows/build_pdf.yml/badge.svg)](https://github.com/Aram32mm/htwsaar-thesis/actions/workflows/build_pdf.yml)
 
 A LaTeX template for theses in Computer Science and Mechatronics-Sensor Technology at HTW Saar. Also suitable for DFHI Computer Science programs (includes specialized title page).
 
