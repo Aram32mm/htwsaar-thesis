@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build script for HTW Saar thesis template
 
-MAIN_FILE="htwsaar-i-mst-vorlage.tex"
+MAIN_FILE="thesis.tex"
 
 # Check for command line arguments
 if [ "$1" == "clean" ]; then
