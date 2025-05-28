@@ -25,10 +25,10 @@ jobs:
       - name: Compile LaTeX document
         uses: dante-ev/latex-action@latest
         with:
-          root_file: htwsaar-i-mst-vorlage.tex
+          root_file: thesis.tex
 
       - name: Rename compiled PDF
-        run: mv htwsaar-i-mst-vorlage.pdf thesis_mendez_gomez_jose_2025.pdf
+        run: mv thesis.pdf thesis_mendez_gomez_jose_2025.pdf
 
       - name: Upload Compiled PDF as Artifact
         uses: actions/upload-artifact@v4
