@@ -1,0 +1,126 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{setspace}
+\usepackage{hyperref}
+\usepackage{csquotes}
+\usepackage{float}
+\usepackage{tabularx}
+\usepackage[backend=biber,style=authoryear]{biblatex}
+
+\addbibresource{references.bib}
+
+\onehalfspacing
+
+\title{\textbf{Retrieval-Augmented Generation for the Discovery of Payment Validation Rules via LLM-Enriched Source Data}}
+\author{Jose Aram Mendez Gomez}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section*{Motivation}
+Modern payment-processing back-ends enforce thousands of Kotlin validation rules that guard format, compliance, and fraud constraints. When engineers introduce new transaction types or debug failures they must quickly locate, comprehend, and adapt the correct rules. Today this search is largely manual—relying on keyword \texttt{grep}, code-review experience, and domain knowledge—so it is slow, error-prone, and scales poorly with rule-set growth. Recent progress in transformer-based \emph{semantic code search} shows that dense embeddings can surface relevant code far better than keyword matching. Yet applying these techniques to domain-specific validation rules raises open questions about rule granularity, hierarchy, and evaluation that existing systems do not resolve.
+
+\section*{Context \& Constraints}
+\begin{itemize}
+  \item \textbf{Corpus:} anonymised Kotlin rule csv repository
+  \item \textbf{Prototype:} existing \texttt{validation-rules-search} project with GPT-generated summaries, Sentence-BERT embeddings, and cosine-similarity search.
+  \item \textbf{Resources:} local computer, company's vector storage and LLM models
+  \item \textbf{Time frame:} \textbf{12 weeks (3 months)}.
+  \item \textbf{Mentor priorities:}
+    \begin{itemize}
+      \item \emph{Must-have:} improved interface styling \& usability; multiple chunking/abstraction levels with hierarchical ranking.
+      \item \emph{Highly desirable:} simple but automatic evaluation of search quality.
+      \item \emph{Optional:} feedback-driven dynamic reranking; two-stage "rule generation" assistant.
+    \end{itemize}
+\end{itemize}
+
+\section*{Problem Statement}
+How can we design efficient search systems for specialized code repositories that balance precision, performance, and usability? This research investigates:
+\begin{enumerate}
+  \item \textbf{Ranking Mechanisms:} What retrieval approaches most effectively surface relevant code in specialized domains? How do semantic embeddings compare with traditional information retrieval methods?
+  
+  \item \textbf{Content Representation:} What are optimal strategies for segmenting and representing code artifacts to maximize search effectiveness? How does granularity impact precision and recall?
+  
+  \item \textbf{Evaluation Frameworks:} What methodologies can reliably assess search quality without extensive manual annotation? Can we leverage AI-assisted evaluation to reduce human effort?
+  
+  \item \textbf{User Experience Design:} How can search interfaces be optimized to improve developer productivity? What presentation and interaction patterns best support code comprehension and discovery?
+\end{enumerate}
+
+\section*{Objectives (As-Is → To-Be → \(\Delta\))}
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{|c|X|X|}
+\hline
+\textbf{\#} & \textbf{Objective} & \textbf{\(\Delta\)-question it closes} \\
+\hline
+\textbf{O1} & Audit current system; record baseline P@5 and UI pain points & Establish As-Is state \\
+\hline
+\textbf{O2} & Design \emph{at least two} chunking hierarchies (e.g.\ fixed-window vs.\ semantic) and \emph{three} similarity pipelines (cosine, BM25+cosine, TF–IDF-weighted) & Bridge ranking \& granularity gap \\
+\hline
+\textbf{O3} & Implement an \emph{LLM-as-judge} evaluation (GPT-4 scoring of top-\(k\)) alongside \emph{unsupervised} metrics (e.g.\ clustering coherence) & Enable quantitative comparison \\
+\hline
+\textbf{O4} & Style and refine UI (grouped results, relevance badge, feedback thumb-up/down) & Reduce cognitive load \\
+\hline
+\textbf{O5 (stretch)} & Collect user feedback for \emph{dynamic reranking} experiments & Explore adaptive retrieval \\
+\hline
+\textbf{O6 (stretch)} & Prototype a two-stage "generate new rule from selected ones" workflow & Assist rule authoring \\
+\hline
+\end{tabularx}
+\end{table}
+
+\section*{Proposed Methodology}
+\subsection*{1 Analysis of As-Is State (Weeks 1–2)}
+\begin{itemize}
+  \item Review existing validation-rules-search codebase; document embedding and search parameters.
+  \item Define baseline metrics: Precision@5, MRR, UI task completion time using ~10 expert queries.
+  \item Identify key pain points in retrieval accuracy and usability.
+\end{itemize}
+
+\subsection*{2 Concept Development (Weeks 3–5)}
+\begin{itemize}
+  \item \textbf{Chunking strategies:}
+    \begin{itemize}
+      \item Fixed-window segmentation (e.g.\ 50, 100, 200 tokens).
+      \item Semantic-boundary detection based on AST or comment blocks.
+      \item Multi-level abstraction via LLM summaries (detailed → concise).
+    \end{itemize}
+  \item \textbf{Similarity pipelines:}
+    \begin{itemize}
+      \item Pure cosine-embedding baseline.
+      \item TF–IDF weighted embedding scoring.
+      \item Hybrid BM25 + embedding retrieval.
+    \end{itemize}
+  \item \textbf{Evaluation protocols:}
+    \begin{itemize}
+      \item Unsupervised metrics: clustering coherence, silhouette score.
+      \item LLM-as-judge: GPT-4 scoring rubric for top-\(k\) relevance.
+      \item Expert review on a small benchmark.
+    \end{itemize}
+\end{itemize}
+
+\subsection*{3 Implementation (Weeks 6–9)}
+\begin{itemize}
+  \item Refactor codebase for modular chunking and ranking components.
+  \item Build evaluation harness to automate metric computation.
+  \item Integrate alternative retrieval pipelines into FAISS/OpenSearch.
+  \item Develop enhanced web UI with React/Vue (grouping, badges, feedback).
+\end{itemize}
+
+\subsection*{4 Evaluation (Weeks 10–12)}
+\begin{itemize}
+  \item Compare top-\(k\) precision and MRR across pipelines and chunking variants.
+  \item Perform ablation studies to isolate the effect of each component.
+  \item Measure UI task times and collect qualitative engineer feedback.
+  \item Document findings; draft thesis chapters.
+\end{itemize}
+
+\section*{References}
+\nocite{*}       
+\printbibliography[heading=none] 
+
+\end{document}

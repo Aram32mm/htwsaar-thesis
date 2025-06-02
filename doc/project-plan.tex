@@ -1,0 +1,273 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{xcolor}
+\usepackage{colortbl}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{hyperref}
+\usepackage{pgfgantt}
+\usepackage{tikz}
+
+% Header and footer setup
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{RAG Payment Validation Rules - Project Plan}
+\rfoot{Page \thepage}
+
+% Section title formatting
+\titleformat{\section}{\Large\bfseries\color{blue!80!black}}{\thesection}{1em}{}
+\titleformat{\subsection}{\large\bfseries\color{blue!60!black}}{\thesubsection}{1em}{}
+
+% Custom colors
+\definecolor{primary}{RGB}{31, 78, 121}
+\definecolor{secondary}{RGB}{68, 114, 148}
+\definecolor{accent}{RGB}{138, 173, 200}
+
+\title{
+    \vspace{-2cm}
+    {\Huge\bfseries\color{primary} Project Plan}\\[0.5cm]
+    {\Large\color{secondary} Retrieval-Augmented Generation for the Discovery of Payment Validation Rules via LLM-Enriched Source Data}\\[0.3cm]
+    {\large Milestone Plan • Work-Breakdown Structure • 12-Week Timeline}
+}
+\author{Jose Aram Mendez Gomez}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Milestones (Success Criteria)}
+
+\subsection{Technical Milestones}
+\begin{enumerate}[leftmargin=2em]
+\item \textbf{Week 3}: Proof-of-concept validation demonstrating basic retrieval functionality
+\item \textbf{Week 5}: End-to-end RAG pipeline producing meaningful validation rules
+\item \textbf{Week 6}: Measurable improvement in system performance metrics
+\item \textbf{Week 8}: Complete evaluation results with statistical significance
+\item \textbf{Week 10}: Final system ready for demonstration and deployment
+\end{enumerate}
+
+\subsection{Academic Milestones}
+\begin{enumerate}[leftmargin=2em]
+\item \textbf{Week 2}: Complete background and related work chapters
+\item \textbf{Week 6}: Detailed methodology chapter with implementation specifics
+\item \textbf{Week 8}: Comprehensive results chapter with analysis
+\item \textbf{Week 9}: Complete thesis draft ready for review
+\item \textbf{Week 11}: Final thesis submission
+\end{enumerate}
+
+\section{Work Breakdown Structure}
+
+\subsection{Phase 1: Foundation and Planning (Weeks 1-2)}
+\subsubsection{Project Initialization}
+\begin{itemize}[leftmargin=2em]
+    \item Literature review and related work analysis
+    \item Thesis scope refinement and problem statement definition (Thesis Writing)
+    \item Technical stack selection and environment setup
+    \item Initial bibliography compilation (10-15 sources minimum)
+\end{itemize}
+
+\subsubsection{Domain Research}
+\begin{itemize}[leftmargin=2em]
+      \item Review key literature on semantic code search, RAG, and payment-rule engines; compile an initial bibliography.
+  \item Finalise research questions, scope, and success metrics.
+  \item Set up development environment (vector store, llm apis) and import the anonymised Kotlin-rule corpus.
+  \item Establish keyword-search baseline (Precision@5, MRR) on a small seed query set.
+  \item Outline data-ingestion workflow and log major risks/assumptions.
+\end{itemize}
+
+\subsection{Phase 2: System Design and Architecture (Week 3)}
+\subsubsection{Technical Architecture}
+\begin{itemize}[leftmargin=2em]
+      \item Draft the high-level architecture (indexing, retrieval, UI, evaluation).
+      \item Confirm tech stack and integration points for each component.
+      \item Define vector-index schema and storage layout.
+      \item Select evaluation metrics and agree on benchmarking protocol.
+\end{itemize}
+
+\subsubsection{Evaluation Framework}
+\begin{itemize}[leftmargin=2em]
+      \item Finalise retrieval and generation metrics (e.g.\ Precision@5, MRR, syntax validity).
+      \item Specify baseline comparison procedure and dataset splits.
+      \item Set performance thresholds and reporting cadence.    
+\end{itemize}
+
+\subsection{Phase 3: Implementation and Development (Weeks 4-6)}
+\subsubsection{Data Pipeline Development}
+\begin{itemize}[leftmargin=2em]
+  \item Clean and normalise the Kotlin-rule corpus.
+  \item Generate embeddings and build the primary vector index.
+  \item Enrich each chunk with LLM summaries for multi-level retrieval.
+\end{itemize}
+
+\subsubsection{RAG System Implementation}
+\begin{itemize}[leftmargin=2em]
+  \item Build and tune the retrieval module.
+  \item Implement the generation layer conditioned on retrieved chunks.
+  \item Integrate retrieval and generation into a single service.
+  \item Add a lightweight UI for manual testing (time-permitting).
+\end{itemize}
+
+
+\subsubsection{System Refinement}
+\begin{itemize}[leftmargin=2em]
+  \item Optimise retrieval latency and memory footprint.
+  \item Refine prompts and generation settings for higher answer quality.
+  \item Strengthen error handling and edge-case coverage.
+  \item Update documentation and complete peer code reviews.
+\end{itemize}
+
+\subsection{Phase 4: Evaluation and Analysis (Weeks 7-9)}
+\subsubsection{Experimental Design}
+\begin{itemize}[leftmargin=2em]
+  \item Lock in the evaluation protocol (offline metrics + user study).
+  \item Compile and vet the test-scenario/query set.
+  \item Wire up automated scoring and dashboarding.
+  \item Organise a human-judged relevance review.
+\end{itemize}
+
+\subsubsection{Results Collection}
+\begin{itemize}[leftmargin=2em]
+  \item Execute the full test suite across all pipeline variants.
+  \item Record metrics and collect user-study feedback.
+  \item Benchmark results against the keyword baseline and prior best model.
+  \item Run statistical tests to confirm significance of observed gains.
+\end{itemize}
+
+\subsubsection{Analysis and Interpretation}
+\begin{itemize}[leftmargin=2em]
+  \item Analyse metrics, highlight key trends and correlations.
+  \item Identify retrieval and generation bottlenecks.
+  \item Document standout successes and notable failure cases.
+  \item Discuss implications, limitations, and next‐step recommendations.
+\end{itemize}
+
+
+\subsection{Phase 5: Documentation and Finalization (Weeks 10-12)}
+\subsubsection{Thesis Writing and Revision}
+\begin{itemize}[leftmargin=2em]
+    \item Complete thesis document compilation
+    \item Technical accuracy review and validation
+    \item Academic writing standards compliance
+    \item Peer review and feedback integration
+\end{itemize}
+
+\subsubsection{Presentation and Defense Preparation}
+\begin{itemize}[leftmargin=2em]
+    \item Defense presentation development
+    \item Demo system preparation
+    \item Q\&A preparation and practice
+    \item Final submission materials compilation
+\end{itemize}
+
+\section{Project Timeline}
+
+% \end{longtable}
+\ganttset{
+  % Modern color scheme
+  group/.append style={fill=primary, draw=primary!80!black},
+  bar/.append style={fill=accent!70, draw=accent!90!black, rounded corners=1pt},
+  milestone/.append style={fill=secondary, draw=secondary!80!black, shape=diamond},
+  % Typography
+  group label font=\small\bfseries\color{primary!80!black},
+  bar label font=\footnotesize\color{black!80},
+  milestone label font=\small\bfseries\color{secondary!80!black},
+  title label font=\large\bfseries\color{primary},
+  % Spacing and sizing
+  x unit=1cm,
+  y unit chart=0.7cm,
+  % Grid styling
+  vgrid={*{1}{draw=gray!20}, *{1}{draw=gray!40}},
+  hgrid style/.style={draw=gray!20, dotted},
+  % Progress styling
+  progress label text={},
+  bar incomplete/.append style={fill=accent!30}
+}
+
+\begin{center}
+\begin{ganttchart}[
+  expand chart=\textwidth,
+  title/.append style={draw=none, fill=primary!10, rounded corners=2pt},
+  title height=1,
+  vgrid,
+  hgrid
+]{1}{12}
+
+% Title with elegant styling
+\gantttitle{\textsc{12 Week Development Plan}}{12} \\
+\gantttitlelist{1,...,12}{1} \\
+
+% Phase 1: Foundation & Planning
+\ganttgroup{\textbf{Phase 1} \textit{Foundation \& Planning}}{1}{2} \\
+  \ganttbar{Literature Review \& Research}{1}{2} \\
+  \ganttbar{Environment Setup \& Scoping}{1}{2} \\
+\ganttmilestone{\textbf{M1} Background Complete}{2} \\[0.5cm]
+
+% Phase 2: Design & Architecture  
+\ganttgroup{\textbf{Phase 2} \textit{Design \& Architecture}}{3}{3} \\
+  \ganttbar{System Architecture Design}{3}{3} \\
+  \ganttbar{Evaluation Framework Spec}{3}{3} \\
+\ganttmilestone{\textbf{M2} PoC Ready}{3} \\[0.5cm]
+
+% Phase 3: Implementation
+\ganttgroup{\textbf{Phase 3} \textit{Core Implementation}}{4}{6} \\
+  \ganttbar{Data Pipeline Development}{4}{5} \\
+  \ganttbar{RAG Core Module}{4}{6} \\
+  \ganttbar{UI Development \textit{(optional)}}{5}{6} \\
+\ganttmilestone{\textbf{M3} End-to-End RAG}{5} \\
+\ganttmilestone{\textbf{M4} Performance Boost}{6} \\[0.5cm]
+
+% Phase 4: Evaluation
+\ganttgroup{\textbf{Phase 4} \textit{Testing \& Evaluation}}{7}{9} \\
+  \ganttbar{Experimental Design}{7}{7} \\
+  \ganttbar{Run Experiments \& Testing}{7}{8} \\
+  \ganttbar{Analysis \& Statistical Review}{8}{9} \\
+\ganttmilestone{\textbf{M5} Evaluation Complete}{8} \\
+\ganttmilestone{\textbf{M6} Draft Complete}{9} \\[0.5cm]
+
+% Phase 5: Finalization
+\ganttgroup{\textbf{Phase 5} \textit{Documentation \& Defense}}{10}{12} \\
+  \ganttbar{System Hardening \& Polish}{10}{10} \\
+  \ganttbar{Thesis Writing \& Revision}{10}{11} \\
+  \ganttbar{Defense Preparation}{11}{12} \\
+\ganttmilestone{\textbf{M7} System Ready}{10} \\
+\ganttmilestone{\textbf{M8} Thesis Submitted}{11} \\
+\ganttmilestone{\textbf{M9} Defense Complete}{12}
+
+\end{ganttchart}
+\end{center}
+
+
+
+
+\section{Expected Contributions}
+
+\subsection{Technical Contributions}
+\begin{itemize}[leftmargin=2em]
+\item Novel application of RAG architecture to financial rule discovery
+\item LLM-based data enrichment techniques for domain-specific applications
+\item Comprehensive evaluation framework for rule generation systems
+\item Open-source implementation for research community
+\end{itemize}
+
+\subsection{Academic Contributions}
+\begin{itemize}[leftmargin=2em]
+\item Empirical analysis of RAG effectiveness in financial domains
+\item Comparative study of automated vs. traditional rule generation
+\item Methodology for evaluating AI-generated business rules
+\item Framework for integrating domain expertise with LLM capabilities
+\end{itemize}
+
+\section{Conclusion}
+
+This comprehensive project plan provides a structured approach to developing an innovative RAG system for payment validation rule discovery. The 12-week timeline balances thorough research with practical implementation, ensuring both academic rigor and technical excellence. Regular milestone reviews and risk mitigation strategies will ensure successful project completion and meaningful contributions to the field of AI-assisted financial systems.
+
+\end{document}
