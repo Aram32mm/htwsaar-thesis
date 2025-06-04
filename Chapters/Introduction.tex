@@ -4,23 +4,80 @@
 \section{Motivation}
 \label{sec:motivation}
 
-% TODO: Add motivation for RAG-based payment validation rule discovery
-% - Current challenges in payment processing
-% - Manual rule creation limitations
-% - Need for automated discovery methods
+The past decade has witnessed an unprecedented acceleration in digital payments.  
+From contactless card taps at supermarket checkouts to invisible “one-click” in-app purchases and recurring subscription debits, each monetary movement now traverses a densely interconnected network of payment gateways, acquirers, card schemes, and fraud-prevention engines.  
+At the heart of every transaction lies a cascade of \emph{validation rules} that guard the system’s integrity: syntactic checks for message formats, regulatory constraints mandated by initiatives such as PSD2 and PCI-DSS, and heuristics that flag suspicious behaviour in real time.
+
+In many modern payment processors these rules are implemented as thousands of small, composable functions—often written in Kotlin because of its concise syntax, null-safety guarantees, and seamless interoperability with the existing JVM ecosystem.  
+Each rule typically inspects a particular field (e.g.\ \texttt{PAN}, \texttt{CVV}, or \texttt{merchant\_category\_code}), raises an exception when constraints are violated, and is chained into larger rule sets via dependency injection or domain-specific languages (DSLs).  
+Although this architecture promotes modularity and unit-testability, it also means that \textbf{engineers must sift through an ever-growing corpus of code to understand, update, or debug the validation logic}.  
+The common workflow relies on manual techniques such as
+\begin{itemize}
+    \item keyword search with \texttt{grep}, IDE “Find in Path”, or simple regular expressions,
+    \item tribal knowledge of naming conventions and package hierarchies, and
+    \item ad-hoc browsing of pull-request histories for context.
+\end{itemize}
+These methods break down as the rule base expands: queries miss semantically relevant files because identifiers differ, developers overlook subtle dependencies hidden in nested DSL constructs, and onboarding new team members becomes a time-consuming mentorship exercise.
+
+\emph{Semantic code search}—powered by distributed vector representations of source code—offers a promising remedy.  
+By embedding code snippets and natural-language queries into a shared latent space, it becomes possible to retrieve conceptually similar artefacts even when lexical overlap is low.  
+Recent advances in \textbf{Retrieval-Augmented Generation (RAG)} extend this idea further: a large language model (LLM) first retrieves the most relevant context and then generates an answer conditioned on that context, combining factual grounding with fluent natural-language explanation.  
+However, off-the-shelf RAG pipelines struggle with \textbf{domain-specific rule corpora}:
+
+\begin{enumerate}
+    \item \textbf{Granularity}. Individual Kotlin validation functions can be as short as three lines but still encode critical business logic; chunk sizes that work for prose or generic code bases often blur these fine boundaries.
+    \item \textbf{Hierarchy}. Rules rarely exist in isolation—they are organised in layered packages, annotated with metadata (e.g.\ severity, compliance tag), and interlinked via DSL chains. A naïve retrieval step cannot capture these topological cues.
+    \item \textbf{Evaluation}. Ground-truth labels for “relevance” do not exist at scale, and manual annotation by payment experts is prohibitively expensive. Standard IR metrics such as MAP or nDCG therefore become unreliable.
+\end{enumerate}
+
+Consequently, engineers still fall back on the old search-and-scan routine, losing productivity and risking subtle errors that could translate into fraudulent approvals or false declines worth millions of euros.  
+Bridging this gap calls for a \emph{tailored RAG framework} that respects the peculiarities of payment validation rules while remaining usable in the fast-paced setting of production incident triage.
 
 \section{Problem Statement and Objectives}
 \label{sec:problem-statement}
 
-% TODO: Define the specific problem being addressed
-% - Payment validation rule complexity
-% - Data heterogeneity challenges
-% - LLM integration requirements
+The central problem addressed in this thesis is how to \textbf{design an efficient, accurate, and developer-friendly retrieval system for a large Kotlin validation-rule corpus by leveraging Retrieval-Augmented Generation}.  
+Formally, given a natural-language query~$q$ (e.g.\ “Why was the CVV length check removed in the Apple Pay flow?”) and a repository~$D$ of Kotlin files and DSL definitions, the goal is to return a ranked list~$R = \{r_1, \dots, r_k\}$ such that:
+
+\begin{itemize}
+    \item each $r_i$ is a code snippet, rule class, or DSL fragment that materially explains or implements the behaviour implied by $q$,
+    \item the latency from query to result is acceptable for interactive usage (sub-second ideally), and
+    \item the accompanying LLM-generated answer is factually grounded in the retrieved context.
+\end{itemize}
+
+To structure the investigation, four research questions (RQs) are posed:
+
+\begin{enumerate}[label=\textbf{RQ\arabic*:}, leftmargin=2.5em]
+    \item \textbf{Retrieval Methods}. Which retrieval techniques—traditional lexical (TF-IDF, BM25), dense vector search, hybrid fusion, or reranking—surface the most relevant validation rules in a specialised payment domain?
+    \item \textbf{Chunking Strategies}. How should Kotlin source files, DSL scripts, and supporting configuration be segmented so that semantically coherent but concise units are indexed without context fragmentation?
+    \item \textbf{Evaluation Metrics}. Which automated or weakly supervised metrics (e.g.\ LLM-as-judge, clustering-based agreement) correlate best with expert relevance judgements in a setting where large, labelled test collections are unavailable?
+    \item \textbf{Result Presentation}. What UI affordances (highlighting, severity badges, code lenses) most effectively translate ranked results into actionable insight for engineers dealing with live incidents or refactorings?
+\end{enumerate}
+
+From these questions the following concrete objectives emerge:
+
+\begin{itemize}
+    \item \textbf{Baseline Audit}. Measure current discovery performance (e.g.\ Precision@\!5) and catalogue usability pain points in the existing IDE workflow.
+    \item \textbf{Design Space Exploration}. Implement multiple chunking schemes (function-level, AST-based, sliding window) and retrieval variants (pure lexical, dense cosine similarity, reciprocal rank fusion) for comparative study.
+    \item \textbf{Light-Weight Evaluation}. Develop an LLM-assisted judging protocol complemented by unsupervised cluster consistency metrics to approximate relevance without large test sets.
+    \item \textbf{UI Enhancement}. Prototype a search panel that shows confidence scores, highlights rule metadata, and lets users provide feedback to close the retrieval loop.
+    \item \textbf{Stretch Goal}. Investigate dynamic reranking with in-context reinforcement and the feasibility of auto-generating new validation rules from mined examples.
+\end{itemize}
+
+Achieving these objectives will demonstrate not only technical feasibility but also measurable gains in developer efficiency and rule quality, thereby justifying the integration of RAG into real-world payment platforms.
 
 \section{Structure of this Thesis}
 \label{sec:structure}
 
-% TODO: Outline the structure of the remaining chapters
-% Chapter 2: Fundamentals
-% Chapter 3: Analysis
-% etc.
+The remainder of this thesis is organised as follows:
+
+\begin{description}[leftmargin=1.6cm, style=nextline]
+    \item[Chapter 2: Fundamentals] introduces core concepts—vector embeddings, semantic code search, retrieval-augmented generation, and rule-engine architectures—providing the theoretical underpinning for later design choices.
+    \item[Chapter 3: Analysis] investigates the current payment validation landscape, profiles the Kotlin rule corpus, and extracts functional as well as non-functional requirements.
+    \item[Chapter 4: Conceptual Design] presents the proposed chunking strategies, retrieval algorithms, evaluation pipeline, and user-interface mock-ups in a technology-agnostic manner.
+    \item[Chapter 5: Implementation] details the concrete software artefacts, from index construction to LLM prompt engineering and front-end integration.
+    \item[Chapter 6: Evaluation] reports empirical results, compares retrieval variants across multiple metrics, and summarises qualitative feedback from payment-domain experts.
+    \item[Chapter 7: Conclusion and Outlook] synthesises the main findings, reflects on limitations, and outlines avenues for future work such as incremental learning and cross-language generalisation.
+\end{description}
+
+This progression—from theoretical background, through problem analysis and solution design, to practical implementation and rigorous evaluation—ensures that each chapter builds on the insights of its predecessors, guiding the reader step-by-step toward a comprehensive answer to the research questions posed above.
