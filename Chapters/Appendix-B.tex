@@ -1,0 +1,79 @@
+%********************************************************************
+% Appendix B – Stakeholder Interview Responses
+%********************************************************************
+\chapter{Appendix B – Stakeholder Interview Responses}
+
+\section{Overview}
+This appendix summarizes key insights from qualitative interviews with business analysts and engineers. Their responses have been synthesized into thematic clusters to reflect stakeholder perspectives on rule discovery, relevance, and retrieval tooling. The input shaped both the system design and evaluation methodology of this thesis.
+
+\section{Business Analyst Perspectives}
+
+\subsection*{BSA1. User Behavior and Intent}
+\begin{itemize}
+  \item The goal is often exploratory: to understand all rules potentially affecting a field or process, not just to locate one rule.
+  \item Add more insights here...
+\end{itemize}
+
+\subsection*{BSA2. Query Language}
+\begin{itemize}
+  \item Input formats include: natural language (e.g., “check amount limit”), error codes (BANSTA/ISO), and field names (e.g., IBAN).
+  \item Queries are predominantly in English, but German queries are also observed in some teams.
+  \item \item Add more insights here...
+\end{itemize}
+
+\subsection*{BSA3. Relevance Criteria}
+\begin{itemize}
+  \item A rule is considered relevant if it addresses the same validation condition or is linked via field or error code metadata.
+  \item Stakeholders accept a broader result set if it includes semantically adjacent logic, especially for exploratory queries.
+  \item \item Add more insights here...
+\end{itemize}
+
+\subsection*{BSA4. Discovery Pain Points}
+\begin{itemize}
+  \item Keyword-based systems often miss conceptually similar rules due to naming inconsistencies.
+  \item Users are unaware of the rule corpus structure, leading to over-reliance on tribal knowledge.
+  \item \item Add more insights here...
+\end{itemize}
+
+\subsection*{BSA5. Desired Features}
+\begin{itemize}
+  \item Highlighting rule relevance score would improve user confidence.
+  \item \item Add more insights here...
+\end{itemize}
+
+\section{Engineer Perspectives}
+
+\subsection*{ENG1. Rule Structure}
+\begin{itemize}
+  \item Rules are implemented primarily in Kotlin, typically as functions with injected dependencies and annotations.
+  \item Metadata includes rule name, several descriptions (english, german, v1, v2), error codes (BANSTA/ISO), and rule body.
+  \item Add more insights here...
+\end{itemize}
+
+\subsection*{ENG2. Search Challenges}
+\begin{itemize}
+  \item Identifiers lack a consistent naming convention; this hinders lexical retrieval.
+  \item Add more insights here...
+\end{itemize}
+
+\subsection*{ENG3. Retrieval Recommendations}
+\begin{itemize}
+  \item Add more insights here...
+\end{itemize}
+
+\subsection*{ENG4. Duplication and Fragmentation}
+\begin{itemize}
+  \item Add more insights here...
+\end{itemize}
+
+\section{Joint Reflections}
+
+\subsection*{Cross-role Insights}
+\begin{itemize}
+  \item Add more insights here...
+\end{itemize}
+
+\subsection*{Suggested Enhancements}
+\begin{itemize}
+  \item Add more insights here...
+\end{itemize}

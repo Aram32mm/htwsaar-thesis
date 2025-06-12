@@ -1,0 +1,102 @@
+%********************************************************************
+% Appendix A – Stakeholder Interview Questions
+%*******************************************************
+\chapter{Appendix A – Stakeholder Interview Questionnaire}
+
+\section{Purpose}
+The goal of this appendix is to document the questionnaire used in stakeholder interviews with business analysts and engineers. 
+These interviews were conducted to understand user expectations around validation rule discovery, relevance criteria, search behavior, and opportunities for improving the current rule-search system.
+The findings directly informed system requirements and the construction of the gold-standard dataset used for evaluation.
+
+\section{Section A: Questions for Business Analysts (BSA)}
+\subsection{A1. User Behavior \& Intent}
+\begin{itemize}
+  \item How do users typically search for validation rules?
+  \item Are users usually looking for a single rule or a broader set of relevant rules?
+  \item What are common user goals when searching? (e.g., resolving an error, understanding system behavior)
+  \item What types of rules or topics are most frequently searched for?
+  \item Are there known user pain points or limitations in current rule discovery workflows?
+\end{itemize}
+
+\subsection{A2. Query Language}
+\begin{itemize}
+  \item What query formats do users rely on most:
+  \begin{itemize}
+    \item Natural language descriptions?
+    \item Technical identifiers or rule names?
+    \item Error codes (e.g., BANSTA/ISO)?
+  \end{itemize}
+  \item Are there recurring domain-specific field names or business terms users tend to reference?
+  \item Do users formulate queries in English, German, or both?
+\end{itemize}
+
+\subsection{A3. Relevance and Coverage}
+\begin{itemize}
+  \item From a business standpoint, what defines a rule as "relevant" to a query?
+  \item Are users satisfied with closely related matches, or do they expect exact hits?
+  \item What is an acceptable range or number of returned rules for broad queries (e.g., "IBAN")?
+  \item Are there must-have rules that should appear regardless of exact phrasing?
+  \item Are there rules that should be excluded or deprioritized due to obsolescence or low impact?
+\end{itemize}
+
+\subsection{A4. Exploration and Grouping}
+\begin{itemize}
+  \item Would users benefit from result grouping by:
+  \begin{itemize}
+    \item Topic or validation field (e.g., IBAN, currency, dates)?
+    \item Associated error code?
+    \item Business function or unit?
+  \end{itemize}
+  \item Are users interested in browsing entire rule clusters related to a flow or transaction type?
+\end{itemize}
+
+\section{Section B: Questions for Engineers}
+\subsection{B1. Rule Representation}
+\begin{itemize}
+  \item Where are validation rules defined (e.g., Kotlin functions, configuration files, database records)?
+  \item Which fields exist per rule? (e.g., name, code, description, rule body, metadata)
+  \item Is there a naming convention that engineers follow when writing rules?
+  \item Are rule descriptions manually authored, auto-generated, or mixed?
+  \item Are there fields or metadata consistent across the entire rule corpus?
+\end{itemize}
+
+\subsection{B2. Retrieval Considerations}
+\begin{itemize}
+  \item Which fields (e.g., description, rule name) are most reliable for understanding a rule’s intent?
+  \item Are there any noisy or unreliable fields that should be weighted less in search?
+  \item Are error codes unique to rules, or shared among multiple implementations?
+  \item Are there duplicate or functionally equivalent rules across modules that might confuse retrieval?
+\end{itemize}
+
+\subsection{B3. Search Behavior and Optimization}
+\begin{itemize}
+  \item Should search prioritization consider:
+  \begin{itemize}
+    \item How frequently a rule is triggered?
+    \item The severity of violations?
+    \item How recently the rule was created or modified?
+  \end{itemize}
+  \item Can the rule metadata be enriched with additional tags, keywords, or structured summaries?
+  \item Should the search interface expose raw Kotlin rule bodies or just natural language summaries?
+  \item How dynamic is the rule set, and what strategy ensures the index stays up to date?
+\end{itemize}
+
+\section{Section C: Joint Questions (Business Analysts \& Engineers)}
+\subsection{C1. Search Expectations}
+\begin{itemize}
+  \item Is the tool primarily for exact lookups or exploratory discovery?
+  \item How should results be organized:
+  \begin{itemize}
+    \item Ranked strictly by relevance?
+    \item Grouped by rule type, flow, or topic?
+    \item Filterable by metadata (e.g., team, error code, validation stage)?
+  \end{itemize}
+\end{itemize}
+
+\subsection{C2. Quality and Evaluation}
+\begin{itemize}
+  \item What defines a high-quality retrieval experience in this context?
+  \item What would undermine user trust in the results (e.g., irrelevant rules, missing critical ones)?
+  \item Are there mission-critical rules that should always appear for related queries?
+  \item Which metrics or signals best reflect success: recall, diversity, user satisfaction, or business KPIs?
+\end{itemize}
