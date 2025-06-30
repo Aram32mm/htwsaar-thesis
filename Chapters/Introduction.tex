@@ -3,6 +3,11 @@
 
 \section{Motivation}
 \label{sec:motivation}
+Modern financial systems process billions of transactions daily, ranging from contactless in-store payments to real-time SEPA transfers and QR-based e-commerce flows. 
+At the heart of these pipelines lies a hidden infrastructure of \emph{validation rules}—structured logic that ensures data integrity, regulatory compliance, and fraud prevention.
+
+These rules are often hand-written by engineers or domain experts and codified into technical artifacts: field-level assertions, syntax checks, cross-field dependencies, and business constraints. 
+In many enterprise systems—especially in banking—the rules are stored as a large corpus of structured text: pseudo-code, metadata, and multilingual descriptions maintained across teams and regions.
 
 The past decade has witnessed an unprecedented acceleration in digital payments.  
 From contactless card taps at supermarket checkouts to invisible “one-click” in-app purchases and recurring subscription debits, each monetary movement now traverses a densely interconnected network of payment gateways, acquirers, card schemes, and fraud-prevention engines.  
@@ -62,6 +67,17 @@ From these questions the following concrete objectives emerge:
     \item \textbf{Light-Weight Evaluation}. Develop an LLM-assisted judging protocol complemented by unsupervised cluster consistency metrics to approximate relevance without large test sets.
     \item \textbf{UI Enhancement}. Prototype a search panel that shows confidence scores, highlights rule metadata, and lets users provide feedback to close the retrieval loop.
     \item \textbf{Stretch Goal}. Investigate dynamic reranking with in-context reinforcement and the feasibility of auto-generating new validation rules from mined examples.
+\end{itemize}
+
+From these, we derive the following concrete objectives:
+
+\begin{itemize}
+    \item \textbf{Architectural Refactor}. Split the system into well-defined modules (retrieval, embeddings, LLM, UI, config) to support maintainability and extensibility.
+    \item \textbf{ANN Integration}. Replace brute-force cosine search with FAISS or HNSWlib to enable real-time scalability.
+    \item \textbf{Summarization Pipeline}. Extend LLM logic to include multi-step prompts, quality filtering, and partial user feedback loops.
+    \item \textbf{Evaluation Suite}. Build a relevance-testing framework using a small gold-standard query set, LLM-as-a-judge tools, and cluster agreement scores.
+    \item \textbf{UI Redesign}. Add interactive sliders, highlighting, download/export options, and rule similarity visualization.
+    \item \textbf{Stretch Goal}. Explore conversational retrieval or auto-generation of new rule summaries from raw logic.
 \end{itemize}
 
 Achieving these objectives will demonstrate not only technical feasibility but also measurable gains in developer efficiency and rule quality, thereby justifying the integration of RAG into real-world payment platforms.
