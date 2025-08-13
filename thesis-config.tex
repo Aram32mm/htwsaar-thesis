@@ -4,7 +4,7 @@
 \RequirePackage[utf8]{inputenc}				
  \DeclareUnicodeCharacter{00A0}{~}								
 \RequirePackage[T1]{fontenc} 
-								
+                
 % ****************************************************************************************************
 % 1. Personal data and user ad-hoc commands
 % ****************************************************************************************************
@@ -42,11 +42,11 @@
 \PassOptionsToPackage{american}{babel}   % change this to your language(s)
  \RequirePackage{babel}					
  \RequirePackage{csquotes}
-	
-\PassOptionsToPackage{language=auto,style=numeric-comp,backend=bibtex8,bibencoding=ascii,maxbibnames=50}{biblatex} % backend ggf. auf neueres Werkzeug (z.B. biber) anpassen
+  
+\PassOptionsToPackage{language=auto,style=numeric-comp,backend=biber,bibencoding=ascii,maxbibnames=50}{biblatex} % backend ggf. auf neueres Werkzeug (z.B. biber) anpassen
  \RequirePackage{biblatex}	
  %\bibliography{Bibliography}	% alter Befehl
- \addbibresource{Bibliography}
+ \addbibresource{Bibliography.bib}
 
 \PassOptionsToPackage{fleqn}{amsmath}		% math environments and more by the AMS 
  \RequirePackage{amsmath}
@@ -63,24 +63,27 @@
 % ******************************************************************** 
 %\usepackage[automark]{scrpage2}
 \PassOptionsToPackage{dvipsnames}{xcolor}
-	\RequirePackage{xcolor} % [dvipsnames]  
-	\definecolor{ingwi}{cmyk}{.9,0,0,0}
+  \RequirePackage{xcolor} % [dvipsnames]  
+  \definecolor{ingwi}{cmyk}{.9,0,0,0}
 \usepackage{textcomp} % fix warning with missing font shapes
 \usepackage{scrhack} % fix warnings when using KOMA with listings package          
 \usepackage{xspace} % to get the spacing after macros right  
 \usepackage{mparhack} % get marginpar right
 %\usepackage{fixltx2e} % fixes some LaTeX stuff <-- ist seit 2015 nicht mehr notwendig
 \PassOptionsToPackage{printonlyused}{acronym}
-	\usepackage{acronym} % nice macros for handling all acronyms in the thesis
+  \usepackage{acronym} % nice macros for handling all acronyms in the thesis
 %\renewcommand{\bflabel}[1]{{#1}\hfill} % fix the list of acronyms
 \usepackage{booktabs}
 \usepackage{multirow}
 \usepackage{todonotes} %Settings for ToDoNotes
+\usepackage{siunitx}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
 % Eigene Shortcuts fuer laengere Befehle
-	\newcommand{\todox}[1]{\todo[inline, size=\small]{#1}}
-	%Nummerierte Anmerkungen
-	\newcounter{todocounter}
-	\renewcommand{\todox}[2][]{\stepcounter{todocounter}\todo[inline, size=\small,caption={\thetodocounter: #2}, #1]{\renewcommand{\baselinestretch}{0.5}\selectfont\thetodocounter: #2\par}}
+  \newcommand{\todox}[1]{\todo[inline, size=\small]{#1}}
+  %Nummerierte Anmerkungen
+  \newcounter{todocounter}
+  \renewcommand{\todox}[2][]{\stepcounter{todocounter}\todo[inline, size=\small,caption={\thetodocounter: #2}, #1]{\renewcommand{\baselinestretch}{0.5}\selectfont\thetodocounter: #2\par}}
 \usepackage{blindtext}
 %\usepackage{footmisc}
 % ****************************************************************************************************
@@ -90,7 +93,7 @@
 % 3. Setup floats: tables, (sub)figures, and captions
 % ****************************************************************************************************
 \usepackage{tabularx} % better tables
-	\setlength{\extrarowheight}{3pt} % increase table row height
+  \setlength{\extrarowheight}{3pt} % increase table row height
 %\newcommand{\myfloatalign}{\centering} % to be used with each float for alignment
 \usepackage{caption}
 \captionsetup{format=hang,font=small}
@@ -118,7 +121,7 @@
     breaklines=true,
     frameround=ftff,
     frame=single,
-		texcl=true,
+    texcl=true,
     belowcaptionskip=.75\baselineskip
     %frame=L
 } 
@@ -128,7 +131,7 @@ belowcaptionskip=1\baselineskip,
   breaklines=true,
   xleftmargin=\parindent,
   language=Java,
-	texcl=true,
+  texcl=true,
   showstringspaces=false,
   basicstyle=\footnotesize\ttfamily,
   keywordstyle=\bfseries\color{green!40!black},
@@ -146,11 +149,11 @@ belowcaptionskip=1\baselineskip,
 % ********************************************************************
 \usepackage{xurl}  % better handling of long URLs / hyphenation
 \PassOptionsToPackage{pdftex,hyperfootnotes=false,pdfpagelabels}{hyperref}
-	\usepackage{hyperref}  % backref linktocpage pagebackref
+  \usepackage{hyperref}  % backref linktocpage pagebackref
 \pdfcompresslevel=9
 \pdfadjustspacing=1 
 \PassOptionsToPackage{pdftex}{graphicx}
-	\usepackage{graphicx} 
+  \usepackage{graphicx} 
     
 
 % ********************************************************************
@@ -159,9 +162,9 @@ belowcaptionskip=1\baselineskip,
 \hypersetup{%
     %draft,	% = no hyperlinking at all (useful in b/w printouts)
     pdfstartpage=1, pdfstartview=Fit,%
-	colorlinks=true, linktocpage=true,
-	%urlcolor=Black, linkcolor=Black, citecolor=Black, %pagecolor=Black,%
-	%urlcolor=brown, linkcolor=RoyalBlue, citecolor=green, %pagecolor=RoyalBlue,%
+  colorlinks=true, linktocpage=true,
+  %urlcolor=Black, linkcolor=Black, citecolor=Black, %pagecolor=Black,%
+  %urlcolor=brown, linkcolor=RoyalBlue, citecolor=green, %pagecolor=RoyalBlue,%
     % uncomment the following line if you want to have black links (e.g., for printing)
     colorlinks=false, pdfborder={0 0 0},
     breaklinks=true, pdfpagemode=UseNone, pageanchor=true, pdfpagemode=UseOutlines,%
@@ -189,30 +192,30 @@ belowcaptionskip=1\baselineskip,
 \@ifpackageloaded{babel}%
     {%
        \addto\extrasamerican{%
-					\renewcommand*{\figureautorefname}{Figure}%
-					\renewcommand*{\tableautorefname}{Table}%
-					\renewcommand*{\partautorefname}{Part}%
-					\renewcommand*{\chapterautorefname}{Chapter}%
-					\renewcommand*{\sectionautorefname}{Section}%
-					\renewcommand*{\subsectionautorefname}{Section}%
-					\renewcommand*{\subsubsectionautorefname}{Section}% 	
-				}%
+          \renewcommand*{\figureautorefname}{Figure}%
+          \renewcommand*{\tableautorefname}{Table}%
+          \renewcommand*{\partautorefname}{Part}%
+          \renewcommand*{\chapterautorefname}{Chapter}%
+          \renewcommand*{\sectionautorefname}{Section}%
+          \renewcommand*{\subsectionautorefname}{Section}%
+          \renewcommand*{\subsubsectionautorefname}{Section}% 	
+        }%
        \addto\extrasngerman{% 
-					\renewcommand*{\chapterautorefname}{Kapitel}%
-					\renewcommand*{\sectionautorefname}{Abschnitt}%
-					\renewcommand*{\subsectionautorefname}{Abschnitt}%
-					\renewcommand*{\subsubsectionautorefname}{Abschnitt}% 
-					\renewcommand*{\paragraphautorefname}{Absatz}%
-					\renewcommand*{\subparagraphautorefname}{Absatz}%
-					\renewcommand*{\footnoteautorefname}{Fußnote}%
-					\renewcommand*{\FancyVerbLineautorefname}{Zeile}%
-					\renewcommand*{\theoremautorefname}{Theorem}%
-					\renewcommand*{\appendixautorefname}{Anhang}%
-					\renewcommand*{\equationautorefname}{Gleichung}%        
-					\renewcommand*{\itemautorefname}{Punkt}%
-				}%	
-			% Fix to getting autorefs for subfigures right (thanks to Belinda Vogt for changing the definition)
-			\providecommand{\subfigureautorefname}{\figureautorefname}%  			
+          \renewcommand*{\chapterautorefname}{Kapitel}%
+          \renewcommand*{\sectionautorefname}{Abschnitt}%
+          \renewcommand*{\subsectionautorefname}{Abschnitt}%
+          \renewcommand*{\subsubsectionautorefname}{Abschnitt}% 
+          \renewcommand*{\paragraphautorefname}{Absatz}%
+          \renewcommand*{\subparagraphautorefname}{Absatz}%
+          \renewcommand*{\footnoteautorefname}{Fußnote}%
+          \renewcommand*{\FancyVerbLineautorefname}{Zeile}%
+          \renewcommand*{\theoremautorefname}{Theorem}%
+          \renewcommand*{\appendixautorefname}{Anhang}%
+          \renewcommand*{\equationautorefname}{Gleichung}%        
+          \renewcommand*{\itemautorefname}{Punkt}%
+        }%	
+      % Fix to getting autorefs for subfigures right (thanks to Belinda Vogt for changing the definition)
+      \providecommand{\subfigureautorefname}{\figureautorefname}%  			
     }{\relax}
 \makeatother
 
@@ -225,7 +228,7 @@ belowcaptionskip=1\baselineskip,
 % ********************************************************************
 %\listfiles
 \PassOptionsToPackage{l2tabu,orthodox,abort}{nag}
-	\usepackage{nag}
+  \usepackage{nag}
 %\PassOptionsToPackage{warning, all}{onlyamsmath}
 %	\usepackage{onlyamsmath}
 
