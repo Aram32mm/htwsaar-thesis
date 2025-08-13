@@ -2,11 +2,13 @@
 \label{chap:evaluation}
 
 \section{Goal and Setting}
+\label{sec:evaluation-goal-setting}
 We evaluate a rule retrieval system used by QA and developers to find and understand Kotlin validation rules. The engine supports three base signals—\emph{Semantic} (embeddings over \texttt{llm\_description}), \emph{BM25} (sparse retrieval over \texttt{keywords}), and \emph{Fuzzy} (string similarity on \texttt{rule\_name})—and a \emph{Hybrid} ranker that linearly combines them.
 
 \paragraph{Dataset.} 30 prompts with a single correct target rule (referenced by name). For each prompt we build a candidate pool as the union of the top–20 from each base signal (deduplicated by \texttt{rule\_id}). Scores from each signal are \emph{per-prompt} normalized to $[0,1]$ before Hybrid combination.
 
 \section{Metrics}
+\label{sec:evaluation-metrics}
 Our primary metric is \textbf{MRR@5} (Mean Reciprocal Rank at cutoff 5):
 \[
 \mathrm{MRR@5}=\frac{1}{|Q|}\sum_{q\in Q} \frac{\mathbb{1}[r_q\le 5]}{r_q},
@@ -16,6 +18,7 @@ where $r_q$ is the rank position of the correct rule for query $q$ (undefined $\
 Secondary metrics are \textbf{Hit@1}, \textbf{Hit@3}, \textbf{Hit@5} (fraction of queries where the correct rule appears in the top $k$) and \textbf{Coverage} (fraction where it appears anywhere in the candidate pool).
 
 \section{Tuning Protocol (LOOCV over the weight simplex)}
+\label{sec:evaluation-tuning-loocv}
 The Hybrid score is a convex combination
 \[
 \text{score} = w_s S_{\text{sem}} + w_b S_{\text{bm25}} + w_f S_{\text{fuzzy}},
@@ -30,7 +33,10 @@ We tune $(w_s,w_b,w_f)$ by \emph{Leave-One-Out Cross-Validation (LOOCV)} over pr
 The final LOOCV score is the average over all held-out prompts. We also report the \emph{median} weight triple across folds for interpretability (this is the single set of weights you would ship).
 
 \section{Results}
+\label{sec:evaluation-results}
+
 \subsection{Baselines and Production Hybrid}
+\label{subsec:evaluation-results-baselines-production}
 Table~\ref{tab:baselines} reports per-method performance; the production Hybrid uses $(w_s,w_b,w_f)=(0.60,0.35,0.05)$.
 
 \begin{table}[h]
@@ -52,6 +58,7 @@ Hybrid (prod)  & 0.433974 & 0.346154 & 0.500000 & 0.576923 & 0.884615 \\
 \end{table}
 
 \subsection{Hybrid Tuning (LOOCV)}
+\label{subsec:evaluation-results-loocv}
 LOOCV over the weight grid improves the Hybrid to the scores in Table~\ref{tab:loocv}. The tuned LOOCV performance is \emph{not} the same calculation as evaluating a single fixed weight set on all prompts; it averages per-fold held-out performance, which is stricter and avoids overfitting.
 
 \begin{table}[h]
@@ -75,6 +82,7 @@ Hybrid (tuned, LOOCV) & 0.482051 & 0.307692 & 0.615385 & 0.807692 & 0.884615 \\
 These median weights are used for ablation and sensitivity analyses below (a single, shippable configuration). Evaluating this single configuration on the full dataset (not LOOCV) yields a center MRR@5 of $0.526923$; the difference vs.\ Table~\ref{tab:loocv} is expected because LOOCV tests each prompt with weights learned \emph{without} seeing that prompt.
 
 \subsection{MRR@5 Comparison Plot}
+\label{subsec:evaluation-results-mrr5-plot}
 \begin{figure}[h]
 \centering
 \begin{tikzpicture}
@@ -98,6 +106,7 @@ These median weights are used for ablation and sensitivity analyses below (a sin
 \end{figure}
 
 \subsection{Ablation Study (Median Weights)}
+\label{subsec:evaluation-results-ablation}
 Starting from the median tuned Hybrid weights $(0.8,0.1,0.1)$, we remove one signal at a time (setting its weight to zero and renormalizing). Results in Table~\ref{tab:ablation} show that Semantic contributes most, BM25 helps, and Fuzzy has the smallest impact—but still provides a positive effect in the median configuration.
 
 \begin{table}[h]
@@ -120,6 +129,7 @@ No Fuzzy    & 0.521795 & 0.384615 & 0.692308 & 0.769231 \\
 \end{table}
 
 \subsection{Sensitivity Analysis (Median Weights)}
+\label{subsec:evaluation-results-sensitivity}
 We vary one weight by $\Delta\in\{-0.20,-0.10,0,+0.10,+0.20\}$ (clipped to $[0,1]$ and renormalized) and re-evaluate MRR@5. The curves are reproduced exactly from the notebook in Figure~\ref{fig:sensitivity}.
 
 \begin{figure}[h]
@@ -158,6 +168,7 @@ We vary one weight by $\Delta\in\{-0.20,-0.10,0,+0.10,+0.20\}$ (clipped to $[0,1
 \end{figure}
 
 \section{Interpretation}
+\label{sec:evaluation-interpretation}
 \paragraph{Effectiveness.} The tuned Hybrid (LOOCV) improves MRR@5 from $0.433974$ (production) to $0.482051$ (\,+4.81\,pp absolute), with strong gains in early precision (Hit@3: $0.50\rightarrow0.615$; Hit@5: $0.577\rightarrow0.808$). Coverage stays constant at $0.885$, indicating the candidate pool is already sufficiently broad.
 
 \paragraph{Role of signals.} Semantic is the strongest individual signal (MRR@5 $=0.440$) and dominates the tuned combination. BM25 contributes complementary lexical grounding (its removal reduces performance relative to the full median configuration). Fuzzy alone is weak, but in the hybrid its weight can be kept small and safely adjusted.
@@ -167,6 +178,7 @@ We vary one weight by $\Delta\in\{-0.20,-0.10,0,+0.10,+0.20\}$ (clipped to $[0,1
 \paragraph{On LOOCV vs.\ single fixed weights.} LOOCV reports held-out performance per prompt and thus is more conservative (MRR@5 $=0.482$). Evaluating the \emph{single} median weight vector on the entire dataset (the setting used for ablation/sensitivity) gives a higher center score ($0.527$), as it is not cross-validated. Both are reported to transparently separate generalization from point estimates.
 
 \section{Takeaways}
+\label{sec:evaluation-takeaways}
 \begin{itemize}
   \item The Hybrid ranker outperforms any single signal; tuning via LOOCV delivers meaningful gains on developer-centric metrics.
   \item A practical, shippable weight setting is \textbf{$(w_s,w_b,w_f)=(0.80,0.10,0.10)$}.
