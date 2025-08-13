@@ -1,8 +1,8 @@
 ### **Name:** Mendez Gomez  
 ### **First Name:** Jose Aram  
 ### **Student ID:** 5020343  
-**Date:** 13.06.2025  
-**Reporting Period:** 02.06.2025 – 13.06.2025  
+**Date:** 15.06.2025
+**Reporting Period:** 01.06.2025 – 15.06.2025
 **Status:** 🟢 Green – On Track
 
 ---
