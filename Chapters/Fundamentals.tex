@@ -1,35 +1,310 @@
 \chapter{Fundamentals}
 \label{ch:fundamentals}
 
+This chapter introduces the core ideas that underpin the system: lexical retrieval with BM25, fuzzy string matching, text embeddings and cosine similarity, the Retrieval-Augmented Generation (RAG) pattern, and the monolithic full-stack architecture built with Dash. Where relevant, the discussion is tailored to our CSV-first design with one row per Kotlin code validation rule.
+
+\section{Lexical Retrieval with BM25}
+BM25 (Best Matching 25) remains one of the most effective probabilistic ranking functions in information retrieval \cite{bm25-robertson2009, robertson1994okapi}. It extends the binary independence model with term frequency saturation and document length normalization. For our system, let $q$ be the query, $d$ a document (specifically, the \emph{Keywords} field of a rule), and $t \in q$ a query term. The BM25 score is:
+\[
+\mathrm{BM25}(q,d) = \sum_{t \in q} \mathrm{IDF}(t) \cdot 
+\frac{f(t,d)\,(k_1 + 1)}{f(t,d) + k_1 \,\big(1 - b + b \cdot \frac{|d|}{\overline{|d|}}\big)}.
+\]
+The inverse document frequency (IDF) component is:
+\[
+\mathrm{IDF}(t) = \log\left(\frac{N - n(t) + 0.5}{n(t) + 0.5}\right)
+\]
+where $N$ is the total number of documents and $n(t)$ is the number of documents containing term $t$.
+
+\paragraph{Parameters.} 
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+ \item $f(t,d)$: term frequency of $t$ in document $d$
+ \item $|d|$: document length in tokens
+ \item $\overline{|d|}$: average document length across the corpus
+ \item $k_1 \in (0, \infty)$: controls term frequency saturation (typical: 1.2--2.0)
+ \item $b \in [0,1]$: controls length normalization strength (0 = no normalization, 1 = full normalization)
+\end{itemize}
+
+In our setting, documents are curated keyword lists averaging 5--10 terms, relatively uniform in length. We use $k_1 = 1.5$ and $b = 0.3$ based on empirical testing. The implementation uses \texttt{rank\_bm25} \cite{rank-bm25} for efficiency.
+
+\paragraph{Strengths and limits.} BM25 is deterministic, fast, and interpretable, making it ideal when queries use the same vocabulary as the keywords. It does not capture meaning beyond token overlap, and will miss relevant rules if users phrase queries differently or with synonyms not present in the curated keywords.
+
+\section{Fuzzy String Matching}
+Fuzzy string matching quantifies similarity between strings that are not exactly identical, crucial for handling variations in terminology, spelling, and tokenization \cite{navarro2001guided}. 
+
+\paragraph{Token-Set Ratio Algorithm.} We employ the token-set ratio from \texttt{fuzzywuzzy} \cite{fuzzywuzzy}, which combines set operations with Levenshtein distance \cite{levenshtein1966}. The algorithm:
+\begin{enumerate}[leftmargin=*,itemsep=2pt,topsep=2pt]
+ \item \textbf{Tokenization}: Split strings into tokens, convert to lowercase
+ \item \textbf{Set formation}: Create sets $S_1, S_2$ of unique tokens from strings $s_1, s_2$
+ \item \textbf{Set operations}: Compute intersection $S_{\cap} = S_1 \cap S_2$, remainders $S_1' = S_1 - S_{\cap}$, $S_2' = S_2 - S_{\cap}$
+ \item \textbf{Comparison}: Calculate ratios for three combinations:
+   \begin{align}
+   r_1 &= \text{LevenshteinRatio}(\text{sort}(S_{\cap}), \text{sort}(S_{\cap} \cup S_1')) \\
+   r_2 &= \text{LevenshteinRatio}(\text{sort}(S_{\cap}), \text{sort}(S_{\cap} \cup S_2')) \\
+   r_3 &= \text{LevenshteinRatio}(\text{sort}(S_{\cap} \cup S_1'), \text{sort}(S_{\cap} \cup S_2'))
+   \end{align}
+ \item \textbf{Final score}: $\text{TokenSetRatio} = \max(r_1, r_2, r_3) \times 100$
+\end{enumerate}
+
+This approach is robust to token reordering and duplicates, making it ideal for comparing keyword lists where order may vary.
+
+\paragraph{Application in Our System.} We apply fuzzy matching to rule names, providing resilience against:
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+ \item Compound word variations: ``crossborder'' vs. ``cross-border''
+ \item Abbreviations: ``EUR'' vs. ``Euro''
+ \item Minor typos and character transpositions
+\end{itemize}
+
+\paragraph{Cost and thresholds.} The token-set ratio is inexpensive for short strings, and we compute it for candidates in the pre-filtered pool. We do not hard-reject on the fuzzy score; instead, it contributes with weight 0.10 in the hybrid combination (Section~\ref{sec:hybrid-combination}).
+
+\section{Text Embeddings and Cosine Similarity}
+Dense text embeddings map variable-length text to fixed-dimensional vectors in a learned semantic space where geometric distance correlates with semantic similarity \cite{mikolov2013distributed, reimers2019sentence}. 
+
+\paragraph{Embedding Model.} We use UAE-Large-V1 \cite{uae-large}, a state-of-the-art sentence transformer that:
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+ \item Produces 1024-dimensional dense vectors
+ \item Uses mean pooling over transformer hidden states
+ \item Achieves strong performance on semantic textual similarity benchmarks
+ \item Supports multilingual text (important for EN/DE descriptions)
+\end{itemize}
+
+\paragraph{Embedding Process.} For each rule $r$, we embed its LLM Generated Description $D(r)$:
+\[
+\mathbf{e}_r = \text{MeanPool}(\text{Transformer}(D(r))) \in \mathbb{R}^{1024}
+\]
+Embeddings are computed offline, L2-normalized for numerical stability, and stored as JSON-serialized arrays in the CSV. At query time, we embed the user query $q$ using the same process: $\mathbf{e}_q = \phi(q)$.
+
+\paragraph{Cosine similarity.} To measure semantic similarity between query vector $\mathbf{q}$ and document vector $\mathbf{d}$ we use cosine similarity:
+\[
+\cos(\mathbf{q}, \mathbf{d}) = \frac{\mathbf{q} \cdot \mathbf{d}}{\|\mathbf{q}\|_2 \, \|\mathbf{d}\|_2} = \mathbf{q}_{\text{norm}} \cdot \mathbf{d}_{\text{norm}}
+\]
+Since we pre-normalize all vectors, cosine similarity reduces to a dot product, enabling efficient computation. Dense retrieval uses \texttt{scikit-learn}'s \texttt{cosine\_similarity} on the in-memory embedding matrix (i.e., normalized dot product).
+
+\paragraph{Theoretical Foundation.} The effectiveness of dense retrieval stems from the distributional hypothesis \cite{harris1954distributional}: words appearing in similar contexts have similar meanings. Modern transformer-based encoders extend this to sentence and paragraph level through self-attention mechanisms that capture long-range dependencies \cite{vaswani2017attention}.
+
+\paragraph{Why embeddings help.} Unlike BM25 and fuzzy matching, embeddings capture meaning beyond exact words. A query like ``EUR international limit'' can retrieve a record whose LLM description mentions ``EUR cross-border threshold'' even if the keywords differ.
+
 \section{Retrieval-Augmented Generation (RAG)}
-\label{sec:rag}
+Retrieval-Augmented Generation combines the strengths of parametric language models with non-parametric retrieval systems \cite{rag-lewis2020, karpukhin2020dense}. RAG addresses key limitations of pure generative models:
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+ \item \textbf{Hallucination}: Generated content is grounded in retrieved documents
+ \item \textbf{Staleness}: Knowledge base can be updated without retraining
+ \item \textbf{Interpretability}: Source attribution is explicit
+ \item \textbf{Efficiency}: Smaller models can leverage external knowledge
+\end{itemize}
 
-% TODO: Explain RAG concepts, architecture, and applications
-% - Traditional LLM limitations
-% - RAG methodology
-% - Vector databases and embeddings
-% - Retrieval mechanisms
+\paragraph{Formal Framework.} Given query $q$, RAG operates in two stages:
+\begin{align}
+\text{Retrieval}: & \quad \mathcal{D}_{\text{relevant}} = \text{Retrieve}(q, \mathcal{D}, k) \\
+\text{Generation}: & \quad y = \text{Generate}(q, \mathcal{D}_{\text{relevant}})
+\end{align}
+where $\mathcal{D}$ is the document corpus, $k$ is the retrieval cutoff, and $y$ is the generated response.
 
-\section{Large Language Models (LLMs)}
-\label{sec:llms}
+\paragraph{Our Implementation.} We adapt RAG for regulatory compliance:
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+ \item \textbf{Retrieval}: Hybrid combination of BM25, fuzzy, and semantic signals
+ \item \textbf{Offline Generation}: LLM enrichment of rule descriptions and keyword extraction
+ \item \textbf{Online Generation}: Template-based explanation assembly from stored fields only—no query-time LLM calls
+ \item \textbf{Grounding}: All explanations directly cite source fields, ensuring auditability
+\end{itemize}
+This architecture maintains full traceability while leveraging LLM capabilities offline where they can be validated.
 
-% TODO: Background on LLMs relevant to the thesis
-% - Architecture overview
-% - Training and fine-tuning
-% - Application in data processing
+\section{Hybrid Retrieval: Combining Signals}
+\label{sec:hybrid-combination}
+Each signal captures a different aspect of relevance. We combine them with empirically tuned weights after normalizing each score to $[0,1]$ within the candidate pool:
+\[
+s_{\text{kw}} = \mathrm{BM25}(q, K(r)),\qquad
+s_{\text{fuzzy}} = \tfrac{1}{100}\,\mathrm{TokenSetRatio}(q, \mathrm{name}(r)),\qquad
+s_{\text{sem}} = \cos\!\big(\phi(q), \psi(D(r))\big),
+\]
+where $\phi$ and $\psi$ denote the UAE-Large-V1 encoder applied to query and document respectively. After computing raw scores, we apply per-query min-max normalization to map each signal to $[0,1]$:
+\[
+\widehat{s}_i = \frac{s_i - \min_{r \in \mathcal{C}} s_i(r)}{\max_{r \in \mathcal{C}} s_i(r) - \min_{r \in \mathcal{C}} s_i(r)}
+\]
+where $\mathcal{C}$ is the candidate pool for the query. We then apply a semantic gate that zeros out off-topic results:
+\[
+\widehat{s}_{\text{sem}}' = \begin{cases}
+\widehat{s}_{\text{sem}} & \text{if } \widehat{s}_{\text{sem}} \ge \tau \\
+0 & \text{otherwise}
+\end{cases} \quad \text{with } \tau = 0.30
+\]
+The final hybrid score uses empirically optimized weights from Leave-One-Out Cross-Validation:
+\[
+\boxed{ \; s = 0.10\,\widehat{s}_{\text{kw}} + 0.10\,\widehat{s}_{\text{fuzzy}} + 0.80\,\widehat{s}_{\text{sem}}' \; }.
+\]
 
-\section{Payment Processing Systems}
-\label{sec:payment-systems}
+\paragraph{Interpretation.} The weights reflect priorities in a rule-search scenario:
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+ \item \textbf{Semantic (0.80)} strongly dominates, capturing conceptual similarity beyond surface forms
+ \item \textbf{BM25 (0.10)} provides lexical grounding when query terms match curated keywords
+ \item \textbf{Fuzzy (0.10)} handles spelling variations and tokenization differences in rule names
+\end{itemize}
+These weights were optimized via Leave-One-Out Cross-Validation to maximize MRR@5, improving performance from 43.4\% (uniform weights) to 48.2\% (tuned weights).
 
-% TODO: Payment validation fundamentals
-% - Payment validation rules
-% - Regulatory requirements
-% - Current validation approaches
+\section{Indexing, Filtering, and Efficiency}
+\paragraph{Index Construction.} At application startup, we build three indices:
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+ \item \textbf{BM25 index}: $O(N \cdot L)$ construction where $N$ is corpus size, $L$ is average keyword list length
+ \item \textbf{Embedding index}: $O(N \cdot d)$ to load and normalize, where $d = 1024$ is embedding dimension
+ \item \textbf{SQLite database}: $O(N)$ for rule metadata and filtering fields
+\end{itemize}
+Total startup time is dominated by embedding loading and normalization, approximately 2-3 seconds for $N \approx 10^3$ rules.
 
-\section{Data Enrichment and Source Data Processing}
-\label{sec:data-enrichment}
+\paragraph{Query-Time Complexity.} For a query with candidate pool size $C$ after filtering:
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+ \item \textbf{BM25 scoring}: $O(|q| \cdot C)$ where $|q|$ is query length in tokens
+ \item \textbf{Semantic search}: $O(d \cdot C)$ for cosine similarity computation
+ \item \textbf{Fuzzy matching}: $O(C \cdot L^2)$ for token-set ratio on rule names
+ \item \textbf{Hybrid combination}: $O(C)$ for normalization and weighted sum
+\end{itemize}
 
-% TODO: Data enrichment concepts
-% - Structured vs unstructured data
-% - Data quality considerations
-% - Integration challenges
+\paragraph{Filters.} Pre-filters on \emph{Rule Type, Country, Business Type, Party Agent} reduce the candidate pool before scoring. This improves latency and removes obviously irrelevant rules.
+
+\paragraph{Performance Guarantees.} With pre-filtering reducing $C$ to typically 50-200 rules, total query time remains under 100ms for computation, well within our P95 < 1000ms target including UI rendering.
+
+\section{Full-Stack Architecture: Dash and the Monolithic Tech Stack}
+
+\paragraph{Reactive Web Applications.} Modern web applications require real-time interactivity without the complexity of traditional client-server architectures. The reactive programming paradigm \cite{bainomugisha2013survey} enables automatic propagation of changes through a dependency graph, ensuring UI consistency with minimal developer overhead.
+
+\subsection{Dash Framework: Theory and Design}
+
+Dash \cite{plotly2020dash} implements a declarative, reactive framework for analytical web applications, built on three theoretical foundations:
+
+\paragraph{1. Declarative UI Specification.} Following React's virtual DOM pattern \cite{react2013}, Dash represents UI as a tree of Python objects that map to HTML/JavaScript components:
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+ \item \textbf{Component abstraction}: Each UI element is a Python class with properties mapping to React props
+ \item \textbf{Immutable state}: Components are stateless; all state lives in a centralized store
+ \item \textbf{Unidirectional data flow}: State changes flow top-down through the component tree
+\end{itemize}
+
+\paragraph{2. Callback-Based Reactivity.} Dash callbacks implement the observer pattern \cite{gamma1994design} with functional reactive programming principles:
+\[
+\text{Callback}: \mathcal{I} \rightarrow \mathcal{O} \quad \text{where} \quad \mathcal{I} = \{\text{Input}_1, \ldots, \text{Input}_n\}, \quad \mathcal{O} = \{\text{Output}_1, \ldots, \text{Output}_m\}
+\]
+Each callback is a pure function that transforms input states to output states, enabling:
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+ \item \textbf{Automatic dependency tracking}: The framework builds a directed acyclic graph (DAG) of callbacks
+ \item \textbf{Efficient updates}: Only affected callbacks re-execute when inputs change
+ \item \textbf{Memoization}: Callback results can be cached based on input signatures
+\end{itemize}
+
+\paragraph{3. WebSocket-Based Communication.} Dash uses WebSockets \cite{fette2011websocket} for bidirectional client-server communication, providing:
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+ \item \textbf{Low latency}: Persistent connections eliminate HTTP overhead
+ \item \textbf{Server-sent updates}: Push notifications for real-time data changes
+ \item \textbf{Stateful sessions}: Server maintains client context across interactions
+\end{itemize}
+
+\subsection{Monolithic Architecture: Theoretical Advantages}
+
+Our monolithic design, where all components run in a single Python process, offers several theoretical and practical benefits \cite{newman2015building}:
+
+\paragraph{1. Shared Memory Model.} All components access the same memory space, enabling:
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+ \item \textbf{Zero-copy data access}: Embeddings and indices are shared without serialization
+ \item \textbf{Cache coherency}: No distributed cache invalidation problems
+ \item \textbf{Atomic operations}: Database writes and index updates are naturally synchronized
+\end{itemize}
+
+\paragraph{2. Process Lifecycle Management.} Single-process architecture simplifies:
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+ \item \textbf{Startup sequencing}: Deterministic initialization order (CSV → SQLite → Indices → UI)
+ \item \textbf{Resource management}: One process to monitor for memory/CPU usage
+ \item \textbf{Error propagation}: Exceptions bubble up through a single call stack
+\end{itemize}
+
+\paragraph{3. Transaction Boundaries.} Monolithic design provides ACID properties without distributed transactions:
+\begin{align}
+\text{Atomicity} &: \text{All operations in a request succeed or fail together} \\
+\text{Consistency} &: \text{Indices and database remain synchronized} \\
+\text{Isolation} &: \text{Python's GIL provides thread-safety for reads} \\
+\text{Durability} &: \text{SQLite ensures persistence with WAL mode}
+\end{align}
+
+\subsection{Technology Stack: Component Analysis}
+
+\paragraph{SQLite as Embedded Database.} SQLite \cite{sqlite2020} provides serverless, zero-configuration data management with:
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+ \item \textbf{B-tree indices}: $O(\log N)$ lookups for filtered queries
+ \item \textbf{Query planner}: Cost-based optimization for complex filters
+ \item \textbf{Write-Ahead Logging}: Concurrent reads with single writer
+ \item \textbf{Memory-mapped I/O}: OS page cache for hot data
+\end{itemize}
+
+For our use case with $N \approx 10^3$ rules and read-heavy workload, SQLite's in-process architecture eliminates network latency while maintaining ACID guarantees.
+
+\paragraph{NumPy/SciPy for Numerical Computing.} The scientific Python stack provides:
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+ \item \textbf{BLAS/LAPACK integration}: Hardware-optimized linear algebra \cite{blackford2002updated}
+ \item \textbf{Vectorized operations}: SIMD instructions for cosine similarity
+ \item \textbf{Memory layout}: Contiguous arrays for cache efficiency
+ \item \textbf{Broadcasting}: Efficient element-wise operations without explicit loops
+\end{itemize}
+
+Our embedding matrix $\mathbf{E} \in \mathbb{R}^{N \times 1024}$ is stored as a contiguous float32 array, requiring approximately 4MB for $N = 10^3$ rules.
+
+\paragraph{Scikit-learn for Machine Learning.} The \texttt{cosine\_similarity} implementation \cite{pedregosa2011scikit} uses:
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+ \item \textbf{Direct matrix multiplication}: For L2-normalized vectors, cosine similarity reduces to dot product
+ \item \textbf{BLAS optimization}: Hardware-accelerated matrix operations via NumPy/SciPy
+ \item \textbf{Efficient computation}: $O(N \cdot d)$ for scoring all candidates against query embedding
+\end{itemize}
+Given our pre-normalized embeddings, cosine similarity computation via optimized BLAS routines provides excellent performance.
+
+\subsection{System Integration and Data Flow}
+
+The complete data flow through our monolithic stack follows a deterministic pipeline:
+
+\begin{enumerate}[leftmargin=*,itemsep=2pt,topsep=2pt]
+ \item \textbf{Startup Phase} (once per deployment):
+   \begin{align}
+   \text{CSV} &\xrightarrow{\text{pandas}} \text{DataFrame} \\
+   \text{DataFrame} &\xrightarrow{\text{to\_sql}} \text{SQLite} \\
+   \text{Embeddings} &\xrightarrow{\text{json.loads}} \text{NumPy array} \\
+   \text{Keywords} &\xrightarrow{\text{BM25Okapi}} \text{Inverted index}
+   \end{align}
+ 
+ \item \textbf{Query Phase} (per request):
+   \begin{align}
+   \text{Query} &\xrightarrow{\text{Dash callback}} \text{Python function} \\
+   \text{Filters} &\xrightarrow{\text{SQL WHERE}} \text{Candidate pool} \\
+   \text{Candidates} &\xrightarrow{\text{Parallel scoring}} \text{Signal scores} \\
+   \text{Scores} &\xrightarrow{\text{Normalization}} \text{Hybrid ranks} \\
+   \text{Results} &\xrightarrow{\text{JSON}} \text{WebSocket response}
+   \end{align}
+\end{enumerate}
+
+\paragraph{Performance Characteristics.} The monolithic architecture achieves:
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+ \item \textbf{Startup time}: 2--3 seconds for loading and indexing $10^3$ rules
+ \item \textbf{Memory footprint}: ~200MB resident (embeddings + indices + Dash runtime)
+ \item \textbf{Query latency}: P50 < 50ms, P95 < 200ms for computation alone
+ \item \textbf{Concurrent users}: 10--20 simultaneous users with single-threaded Python
+\end{itemize}
+
+\subsection{Trade-offs and Design Decisions}
+
+Our monolithic, in-process architecture makes deliberate trade-offs:
+
+\paragraph{Advantages:}
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+ \item \textbf{Simplicity}: Single codebase, one deployment artifact
+ \item \textbf{Debugging}: Standard Python profilers and debuggers work
+ \item \textbf{Latency}: No network hops between components
+ \item \textbf{Consistency}: No distributed state synchronization
+\end{itemize}
+
+\paragraph{Limitations:}
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+ \item \textbf{Scalability}: Vertical scaling only (more CPU/RAM)
+ \item \textbf{Fault tolerance}: Component failure affects entire system
+ \item \textbf{Elasticity}: Cannot independently scale retrieval vs. UI
+ \item \textbf{GIL bottleneck}: Python's Global Interpreter Lock limits parallelism
+\end{itemize}
+
+For our use case—$10^3$ rules, dozens of users, regulatory constraints—these trade-offs favor simplicity and auditability over distributed system complexity.
+
+\section{Worked Example (Conceptual)}
+Suppose the query is ``EUR cross-border limit''. Keyword BM25 will match rules whose curated keywords include \emph{eur}, \emph{cross-border}, or \emph{limit}. Fuzzy matching gives a boost if rule names contain variants like \emph{crossborder}. The semantic component uses the query embedding and each rule's LLM-description embedding; records describing ``EUR transfers to non-DE countries above 100k'' will score highly even if the exact phrase ``cross-border'' is absent. The final score—after normalization and semantic gating at $0.30$—determines the top results shown to the user.
+
+\section{Summary}
+BM25 provides a reliable lexical baseline over curated keywords, fuzzy matching adds tolerance to minor string differences, and embeddings with cosine similarity capture meaning beyond exact tokens. A hybrid combination with empirically tuned weights (0.80 semantic, 0.10 BM25, 0.10 fuzzy) optimally balances these strengths. The monolithic Dash architecture enables zero-copy data sharing, deterministic startup sequencing, and sub-second query latency. Together with lightweight filters and grounded generation, this forms a compact, auditable solution suitable for regulated banking environments.
