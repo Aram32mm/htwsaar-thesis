@@ -26,6 +26,8 @@ jobs:
         uses: dante-ev/latex-action@latest
         with:
           root_file: thesis.tex
+          compiler: latexmk
+          args: -pdf -interaction=nonstopmode -file-line-error -bibtex
 
       - name: Rename compiled PDF
         run: mv thesis.pdf thesis_mendez_gomez_jose_2025.pdf
