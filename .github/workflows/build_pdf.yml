@@ -22,43 +22,12 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Debug - List files
-        run: |
-          echo "Current directory:"
-          pwd
-          echo "Files in directory:"
-          ls -la
-          echo "Bibliography file:"
-          ls -la Bibliography.bib || echo "Bibliography.bib not found"
-          echo "First 10 lines of Bibliography.bib:"
-          head -n 10 Bibliography.bib || echo "Cannot read Bibliography.bib"
-
-      - name: Compile LaTeX document (First Pass)
+      - name: Compile LaTeX document with latexmk (force complete processing)
         uses: dante-ev/latex-action@latest
         with:
           root_file: thesis.tex
-          compiler: pdflatex
-          args: -interaction=nonstopmode -file-line-error
-
-      - name: Run Biber
-        uses: dante-ev/latex-action@latest
-        with:
-          root_file: thesis
-          compiler: biber
-
-      - name: Compile LaTeX document (Second Pass)
-        uses: dante-ev/latex-action@latest
-        with:
-          root_file: thesis.tex
-          compiler: pdflatex
-          args: -interaction=nonstopmode -file-line-error
-
-      - name: Compile LaTeX document (Third Pass)
-        uses: dante-ev/latex-action@latest
-        with:
-          root_file: thesis.tex
-          compiler: pdflatex
-          args: -interaction=nonstopmode -file-line-error
+          compiler: latexmk
+          args: -pdf -r .latexmkrc -g -f
 
       - name: Rename compiled PDF
         run: mv thesis.pdf thesis_mendez_gomez_jose_2025.pdf
@@ -68,4 +37,3 @@ jobs:
         with:
           name: thesis-pdf
           path: thesis_mendez_gomez_jose_2025.pdf
-          
