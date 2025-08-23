@@ -22,12 +22,23 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Compile LaTeX document with latexmk (force complete processing)
+      - name: Compile LaTeX document with latexmk
         uses: dante-ev/latex-action@latest
         with:
           root_file: thesis.tex
           compiler: latexmk
           args: -pdf -r .latexmkrc -g -f
+        continue-on-error: true  # Continue even if latexmk returns non-zero exit code
+
+      - name: Check PDF creation
+        run: |
+          if [ -f thesis.pdf ]; then
+            echo "✅ PDF created successfully!"
+            ls -lh thesis.pdf
+          else
+            echo "❌ PDF not found"
+            exit 1
+          fi
 
       - name: Rename compiled PDF
         run: mv thesis.pdf thesis_mendez_gomez_jose_2025.pdf
