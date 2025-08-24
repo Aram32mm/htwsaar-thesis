@@ -1,0 +1,400 @@
+%********************************************************************
+% Appendix A – System Configuration and Implementation Details
+%*******************************************************
+\chapter{System Configuration and Implementation Details}
+\label{app:implementation}
+
+This appendix provides comprehensive technical details about the hybrid retrieval system implementation, including configuration parameters, API specifications, deployment instructions, and performance measurements.
+
+\section{System Configuration}
+\label{sec:app-config}
+
+\subsection{Search Configuration Parameters}
+
+The system's retrieval behavior is controlled through configuration parameters tuned via Leave-One-Out Cross-Validation:
+
+\begin{table}[!htbp]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Parameter} & \textbf{Value} & \textbf{Description} \\
+\midrule
+\texttt{SEMANTIC\_WEIGHT} & 0.80 & Weight for semantic similarity signal \\
+\texttt{BM25\_WEIGHT} & 0.10 & Weight for BM25 keyword matching \\
+\texttt{FUZZY\_WEIGHT} & 0.10 & Weight for fuzzy string matching \\
+\texttt{MIN\_SIMILARITY} & 0.30 & Semantic gate threshold ($\tau$) \\
+\texttt{ENABLE\_RERANKING} & False & Metadata-based reranking flag \\
+\texttt{DEFAULT\_SEARCH\_LIMIT} & 10 & Maximum results per query \\
+\texttt{EMBEDDING\_MODEL} & UAE-Large-V1 & Transformer model path \\
+\texttt{EMBEDDING\_DIM} & 1024 & Embedding vector dimensions \\
+\bottomrule
+\end{tabular}
+\caption{Core search configuration parameters with LOOCV-tuned values.}
+\label{tab:config-params}
+\end{table}
+
+\subsection{Database Configuration}
+
+SQLite database settings optimized for concurrent read access:
+
+\begin{lstlisting}[language=Python, caption={SQLite database configuration}, label={lst:db-config}]
+# Database paths
+SQLITE_DB_PATH = "db/rules.db"
+SQLITE_TABLE_NAME = "rules"
+CSV_DATA_PATH = "data/validation_rules.csv"
+
+# SQLite pragmas for optimization
+PRAGMA journal_mode = WAL;      # Write-Ahead Logging
+PRAGMA synchronous = NORMAL;    # Balance safety/speed
+PRAGMA foreign_keys = ON;       # Referential integrity
+PRAGMA busy_timeout = 5000;     # 5 second timeout
+PRAGMA cache_size = -64000;     # 64MB page cache
+\end{lstlisting}
+
+\subsection{Application Settings}
+
+Dash web application configuration:
+
+\begin{lstlisting}[language=Python, caption={Application configuration}, label={lst:app-settings}]
+# Server settings
+APP_TITLE = "Validation Rules Search Engine"
+DEBUG = 1                        # Development mode
+HOST = "127.0.0.1"              # Bind address
+PORT = 8050                     # Application port
+
+# Feature flags
+CHAT_ENABLED = 1                # Enable chat interface
+UPDATE_EMBEDDINGS = 1           # Recompute on startup
+
+# Generator settings
+GENERATOR_MESSAGE_WINDOW = 10   # Chat history size
+GENERATOR_TEMPERATURE = 0.7     # LLM temperature
+GENERATOR_MAX_TOKENS = 512      # Response length limit
+\end{lstlisting}
+
+\clearpage
+\section{Data Schema}
+\label{sec:app-schema}
+
+\subsection{Input CSV Schema}
+
+The standardized CSV corpus contains only essential rule data:
+
+\begin{table}[!htbp]
+\centering
+\small
+\begin{tabular}{p{3.5cm}p{2cm}p{6cm}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\
+\midrule
+\texttt{rule\_id} & TEXT & Unique identifier \\
+\texttt{rule\_name} & TEXT & Human-readable name \\
+\texttt{rule\_description} & TEXT & Original business description \\
+\texttt{bansta\_error\_code} & TEXT & Banking error code \\
+\texttt{iso\_error\_code} & TEXT & ISO 20022 error code \\
+\texttt{description\_en} & TEXT & English description \\
+\texttt{description\_de} & TEXT & German description \\
+\texttt{rule\_code} & TEXT & Kotlin implementation \\
+\texttt{llm\_description} & TEXT & LLM-enhanced description \\
+\texttt{keywords} & TEXT & Comma-separated keywords \\
+\texttt{rule\_type} & TEXT & Comma-separated types \\
+\texttt{country} & TEXT & Comma-separated countries \\
+\texttt{business\_type} & TEXT & Comma-separated business types \\
+\texttt{party\_agent} & TEXT & Comma-separated agents \\
+\texttt{embedding} & TEXT & JSON array of 1024 floats \\
+\bottomrule
+\end{tabular}
+\caption{Input CSV schema containing rule-specific data.}
+\label{tab:csv-schema}
+\end{table}
+
+\subsection{Database Metadata Fields}
+
+Additional metadata fields are automatically added during database ingestion:
+
+\begin{table}[!htbp]
+\centering
+\small
+\begin{tabular}{p{3.5cm}p{2cm}p{6cm}}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Default Value} \\
+\midrule
+\texttt{relevance} & REAL & 1.0 (maximum relevance) \\
+\texttt{version\_major} & INTEGER & 1 \\
+\texttt{version\_minor} & INTEGER & 0 \\
+\texttt{created\_at} & TEXT & Current ISO 8601 timestamp \\
+\texttt{updated\_at} & TEXT & Current ISO 8601 timestamp \\
+\bottomrule
+\end{tabular}
+\caption{Metadata fields automatically added during database ingestion.}
+\label{tab:metadata-fields}
+\end{table}
+
+\subsection{Embedding Storage Format}
+
+Embeddings are serialized as JSON arrays for portability and compatibility:
+
+\begin{lstlisting}[language=Python, caption={Embedding serialization and deserialization}, label={lst:embedding-format}]
+# During corpus preparation (offline)
+import json
+import numpy as np
+
+embedding_vector = model.encode(text)  # Shape: (1024,)
+embedding_json = json.dumps(embedding_vector.tolist())
+# Store in CSV as string
+
+# At runtime (online)
+embedding_array = np.array(
+   json.loads(embedding_json), 
+   dtype=np.float32  # Memory optimization
+)
+# L2 normalize for cosine similarity
+norm = np.linalg.norm(embedding_array) + 1e-12
+embedding_normalized = embedding_array / norm
+\end{lstlisting}
+
+\clearpage
+\section{API Specifications}
+\label{sec:app-api}
+
+\subsection{RuleRetriever Interface}
+
+The main retrieval class exposes three public methods for search and exploration:
+
+\begin{lstlisting}[language=Python, caption={RuleRetriever public API}, label={lst:retriever-api}]
+class RuleRetriever:
+   def search_rules(
+       self,
+       query: Optional[str] = None,
+       rule_type: Optional[List[str]] = None,
+       country: Optional[List[str]] = None,
+       business_type: Optional[List[str]] = None,
+       party_agent: Optional[List[str]] = None,
+       mode: SearchMode = SearchMode.HYBRID,
+       top_k: int = 10
+   ) -> List[dict]:
+       """
+       Search for validation rules.
+       Returns list of rules with search_score field.
+       """
+       
+   def get_filter_options(self) -> Dict[str, List[str]]:
+       """
+       Get available filter values for UI dropdowns.
+       Returns dict mapping field names to unique values.
+       """
+       
+   def candidate_pool(
+       self, 
+       query: str, 
+       k_each: int = 20
+   ) -> List[dict]:
+       """
+       Get union of top-k from each signal.
+       Used for evaluation experiments only.
+       """
+\end{lstlisting}
+
+\subsection{Search Modes}
+
+The system supports four distinct retrieval modes:
+
+\begin{lstlisting}[language=Python, caption={Search mode enumeration}, label={lst:search-modes}]
+from enum import Enum
+
+class SearchMode(Enum):
+   HYBRID = "hybrid"      # Weighted combination (default)
+   SEMANTIC = "semantic"  # Embedding similarity only
+   KEYWORD = "keyword"    # BM25 only
+   FUZZY = "fuzzy"       # String similarity only
+\end{lstlisting}
+
+\clearpage
+\section{Deployment Instructions}
+\label{sec:app-deployment}
+
+\subsection{Local Development Setup}
+
+\begin{lstlisting}[language=bash, caption={Local development setup}, label={lst:local-setup}]
+# Clone repository
+git clone <repository-url>
+cd validation-rule-search
+
+# Create virtual environment
+python -m venv env
+source env/bin/activate  # Windows: env\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run application
+python app.py
+
+# Access at http://localhost:8050
+\end{lstlisting}
+
+\subsection{Production Deployment}
+
+\begin{lstlisting}[language=bash, caption={Production deployment with gunicorn}, label={lst:prod-deploy}]
+# Install production server
+pip install gunicorn
+
+# Run with multiple workers
+gunicorn app:server \
+   --workers 4 \
+   --worker-class sync \
+   --bind 0.0.0.0:8050 \
+   --timeout 120 \
+   --log-level info
+\end{lstlisting}
+
+\subsection{Systemd Service Configuration}
+
+\begin{lstlisting}[language=ini, caption={Systemd service configuration}, label={lst:systemd}]
+[Unit]
+Description=Validation Rule Search Engine
+After=network.target
+
+[Service]
+Type=simple
+User=appuser
+WorkingDirectory=/opt/validation-rule-search
+Environment="PATH=/opt/validation-rule-search/env/bin"
+ExecStart=/opt/validation-rule-search/env/bin/gunicorn \
+   app:server --workers 4 --bind 0.0.0.0:8050
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+\end{lstlisting}
+
+\clearpage
+\section{Performance Measurements}
+\label{sec:app-performance}
+
+\subsection{Test Environment}
+
+Performance measurements were conducted on a development machine with the following specifications:
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+ \item Python 3.x runtime environment
+ \item Full corpus of 1,157 validation rules
+ \item 50 diverse test queries spanning different types and lengths
+ \item All measurements averaged over multiple runs
+\end{itemize}
+
+\subsection{System Performance Metrics}
+
+\begin{table}[!htbp]
+\centering
+\begin{tabular}{lr}
+\toprule
+\textbf{Metric} & \textbf{Measured Value} \\
+\midrule
+Startup time & 464 ms \\
+Index build time & 72 ms \\
+Memory usage & 530 MB \\
+Memory percentage & 3.23\% \\
+Database full read (mean) & 27 ms \\
+Database full read (P95) & 32 ms \\
+Total rules indexed & 1,157 \\
+\bottomrule
+\end{tabular}
+\caption{System initialization and resource metrics.}
+\label{tab:system-metrics}
+\end{table}
+
+\subsection{Search Latency by Mode}
+
+\begin{table}[!htbp]
+\centering
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Search Mode} & \textbf{Mean} & \textbf{Median} & \textbf{P95} & \textbf{P99} \\
+& \textbf{(ms)} & \textbf{(ms)} & \textbf{(ms)} & \textbf{(ms)} \\
+\midrule
+Keyword (BM25) & 1.2 & 1.1 & 2.2 & 2.4 \\
+Semantic & 2.4 & 2.4 & 3.1 & 3.6 \\
+Fuzzy & 19.4 & 18.3 & 35.8 & 36.3 \\
+Hybrid & 189.3 & 58.1 & 659.8 & 2129.4 \\
+\bottomrule
+\end{tabular}
+\caption{Query latency distribution across different search modes.}
+\label{tab:search-latency}
+\end{table}
+
+\subsection{Filter Impact on Performance}
+
+\begin{table}[!htbp]
+\centering
+\begin{tabular}{lrr}
+\toprule
+\textbf{Filter Configuration} & \textbf{Mean (ms)} & \textbf{P95 (ms)} \\
+\midrule
+No filters (full corpus) & 35.7 & 36.4 \\
+Single filter applied & 1.2 & 1.5 \\
+Multiple filters applied & 0.3 & 0.4 \\
+\bottomrule
+\end{tabular}
+\caption{Performance improvement with filter application.}
+\label{tab:filter-impact}
+\end{table}
+
+\clearpage
+\section{Data Preparation Pipeline}
+\label{sec:app-pipeline}
+
+\subsection{Standardization Process}
+
+The validation rule corpus undergoes a seven-stage standardization pipeline:
+
+\begin{enumerate}[leftmargin=*,itemsep=3pt,topsep=3pt]
+ \item \textbf{Collection}: Aggregate rules from distributed sources
+ \item \textbf{Deduplication}: Remove duplicate rules by \texttt{rule\_id}
+ \item \textbf{Field Mapping}: Normalize column names and formats
+ \item \textbf{LLM Enhancement}: Generate descriptions using Gemini-2.5-Pro
+ \item \textbf{Keyword Extraction}: Extract search terms from descriptions
+ \item \textbf{Embedding Generation}: Compute UAE-Large-V1 vectors
+ \item \textbf{Export}: Save as standardized CSV format
+\end{enumerate}
+
+\subsection{Embedding Generation Script}
+
+The following script generates embeddings for all rules in batch:
+
+\begin{lstlisting}[language=Python, caption={Batch embedding generation script}, label={lst:batch-embed}]
+def generate_embeddings(csv_path, model_name="UAE-Large-V1"):
+   # Load pre-trained model
+   tokenizer = AutoTokenizer.from_pretrained(model_name)
+   model = AutoModel.from_pretrained(model_name)
+   
+   # Load rule data
+   df = pd.read_csv(csv_path)
+   embeddings = []
+   
+   # Process each rule description
+   for text in df['llm_description']:
+       inputs = tokenizer(
+           text, 
+           return_tensors='pt',
+           truncation=True, 
+           max_length=512
+       )
+       
+       with torch.no_grad():
+           outputs = model(**inputs)
+           # Mean pooling across tokens
+           emb = outputs.last_hidden_state.mean(dim=1)
+           # L2 normalize for cosine similarity
+           emb = F.normalize(emb, p=2, dim=1)
+           embeddings.append(emb.squeeze().tolist())
+   
+   # Save embeddings as JSON strings
+   df['embedding'] = [json.dumps(e) for e in embeddings]
+   df.to_csv(csv_path, index=False)
+   print(f"Generated embeddings for {len(df)} rules")
+\end{lstlisting}
+
+\section{Summary}
+
+This appendix provides the complete technical specification for the hybrid retrieval system. The configuration parameters enable fine-tuning for different deployments, while the API specifications ensure consistent integration. Performance measurements demonstrate production readiness with sub-second response times for most queries. The data preparation pipeline ensures reproducible corpus standardization, enabling other organizations to implement similar systems with their own validation rule sets.

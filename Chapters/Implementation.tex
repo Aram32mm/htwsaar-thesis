@@ -108,6 +108,18 @@ The UI provides dual interfaces for search and generation, unified in a responsi
 
 The search component offers faceted filtering and hybrid retrieval modes. As shown in Figure~\ref{fig:search-interface}, the interface includes natural language query input with debouncing, toggle between Keyword and Hybrid search modes, and real-time result updates as filters change.
 
+\textbf{Interaction Modes:}
+
+The system supports three distinct interaction modes to accommodate different user workflows:
+
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+  \item \textbf{Search mode}: Query-driven retrieval with relevance ranking based on hybrid scoring
+  \item \textbf{Browse mode}: Filter-based exploration where users can view all rules matching specific criteria without entering a query
+  \item \textbf{Filtered search}: Query execution within a pre-filtered subset, combining both approaches
+\end{itemize}
+
+When no query is provided, filtered rules receive a score of 1.0, indicating perfect match to the filter criteria. This design choice ensures that users can explore the rule corpus by category even without knowing specific search terms—particularly valuable for QA teams reviewing all rules for a specific country or validation type.
+
 \begin{figure}[!htbp]
 \centering
 \includegraphics[width=0.9\textwidth]{Figures/full_search.png}

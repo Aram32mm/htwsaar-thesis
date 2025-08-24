@@ -21,28 +21,32 @@ Our architecture adheres to five core principles that guide all implementation d
 
 \subsection{Monolithic Architecture}
 
-\begin{figure}[ht]
+The system adopts a monolithic architecture where all components operate within a single Dash application process, as illustrated in Figure~\ref{fig:monolithic-architecture}.
+
+\begin{figure}[!htbp]
 \centering
 \begin{tikzpicture}[
   >=latex,
-  node distance=1.5cm,
-  component/.style={rectangle, draw, minimum width=3.5cm, minimum height=1cm, align=center},
+  node distance=1.8cm,
+  component/.style={rectangle, draw, minimum width=4cm, minimum height=1.2cm, align=center, font=\small},
   ui/.style={component, fill=blue!20},
   engine/.style={component, fill=green!20},
   data/.style={component, fill=orange!20},
-  arrow/.style={->, thick}
+  storage/.style={component, fill=orange!10},
+  arrow/.style={->, thick},
+  label/.style={font=\footnotesize\bfseries, text=gray}
 ]
 
-% UI Layer
-\node[ui] (search) {Search UI\\{\scriptsize Filters, Results}};
-\node[ui, right=of search] (generator) {Generator UI\\{\scriptsize Chat, Upload}};
+% Center the RAG Engine first
+\node[engine] (rag) at (0,0) {RAG Engine\\{\scriptsize Retriever, Embeddings, Scorer}};
 
-% RAG Engine Layer
-\node[engine, below=2cm of search, xshift=2cm] (rag) {RAG Engine\\{\scriptsize Retriever, Embeddings, Scorer}};
+% UI Layer - positioned above RAG
+\node[ui] (search) at (-2.5,2) {Search UI\\{\scriptsize Filters, Results}};
+\node[ui] (generator) at (2.5,2) {Generator UI\\{\scriptsize Chat, Upload}};
 
-% Data Layer
-\node[data, below=of rag] (sqlite) {SQLite Cache\\{\scriptsize Rules, Metadata}};
-\node[data, below=of sqlite] (csv) {CSV Corpus\\{\scriptsize 1,157 Rules}};
+% Data Layer - positioned below RAG
+\node[data] (sqlite) at (0,-2) {SQLite Cache\\{\scriptsize Rules, Metadata}};
+\node[storage] (csv) at (0,-4) {CSV Corpus\\{\scriptsize 1,157 Rules}};
 
 % Connections
 \draw[arrow] (search) -- (rag);
@@ -51,18 +55,20 @@ Our architecture adheres to five core principles that guide all implementation d
 \draw[arrow] (rag) -- (sqlite);
 \draw[arrow] (sqlite) -- (csv);
 
-% Annotations
-\node[anchor=west] at (6,0) {\textbf{Presentation}};
-\node[anchor=west] at (6,-2) {\textbf{Business Logic}};
-\node[anchor=west] at (6,-4.5) {\textbf{Data Access}};
-\node[anchor=west] at (6,-6) {\textbf{Storage}};
+% Layer labels on the left
+\node[label, anchor=east] at (-5,2) {Presentation Layer};
+\node[label, anchor=east] at (-5,0) {Business Logic};
+\node[label, anchor=east] at (-5,-2) {Data Access};
+\node[label, anchor=east] at (-5,-4) {Storage};
 
 % Process boundary
-\draw[dashed, thick, rounded corners] (-2,1) rectangle (5,-7) 
-  node[pos=0, anchor=north west] {\small Single Dash Process};
+\draw[dashed, thick, rounded corners=10pt, draw=gray!60] 
+  (-5.5,3.5) rectangle (5.5,-5) 
+
+\node[font=\small\bfseries, anchor=north west] at (-5.3,3.3) {Single Dash Process};
 
 \end{tikzpicture}
-\caption{Monolithic architecture with all components running in a single Dash application process. The UI layer provides search and generator interfaces, the RAG engine handles retrieval and scoring, and the data layer manages persistent storage and caching.}
+\caption{Monolithic architecture with centralized RAG engine. All components run in a single Dash process, with the UI layer handling user interaction, the RAG engine managing retrieval logic, and the data layer providing persistent storage.}
 \label{fig:monolithic-architecture}
 \end{figure}
 

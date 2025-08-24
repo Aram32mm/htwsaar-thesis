@@ -3,10 +3,15 @@
 %*******************************************************
 \cleardoublepage
 \begingroup
-	\let\clearpage\relax
-	\let\cleardoublepage\relax
+	\cleardoublepage
+	\phantomsection
 	\listoffigures
+
+	\cleardoublepage
+	\phantomsection
 	\listoftables
-	%\addcontentsline{toc}{chapter}{\lstlistlistingname}
-	\lstlistoflistings 
+
+	\cleardoublepage
+	\phantomsection
+	\lstlistoflistings
 \endgroup 
