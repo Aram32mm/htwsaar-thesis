@@ -1,328 +1,476 @@
-\chapter{Implementation}
-\label{ch:implementation}
+\chapter{Implementation}\label{ch:implementation}
 
-This chapter details the Python implementation of our hybrid retrieval system, describing the architectural decisions, core components, and practical trade-offs made to deliver a working system within banking infrastructure constraints.
-
-\section{Project Structure}
-
-The implementation follows a modular architecture with clear separation between user interface components, retrieval logic, and data management:
-
-\begin{lstlisting}[language=bash, caption={Project directory structure}, label={lst:project-structure}]
-validation-rule-search/
-├── app.py                 # Main Dash application entry point
-├── config.py             # Configuration settings
-├── requirements.txt      # Python dependencies
-├── components/           # UI Components
-│   ├── generator.py     # Chat interface UI
-│   ├── search.py       # Search interface with filters
-│   └── layout.py       # Unified interface
-├── rag/                 # Retrieval-Augmented Generation
-│   ├── embeddings/     # Embedding management
-│   │   ├── manager.py # Model operations
-│   │   └── index.py   # Semantic search
-│   └── search/        # Search implementation
-│       └── retriever.py # Hybrid retrieval
-├── db/                 # Database layer
-│   ├── manager.py     # SQLite operations
-│   └── rules.db       # Generated database
-└── data/
-    └── validation_rules.csv # Standardized corpus
-\end{lstlisting}
+This chapter details the implementation of our Retrieval-Augmented Generation system for validation rule discovery, examining the complete retrieval pipeline from data loading through hybrid scoring to user interface.
 
 \section{System Architecture}
 
-The system implements a monolithic architecture optimized for banking deployment constraints. All components run within a single Dash application process, sharing memory-efficient data structures and eliminating network overhead. Figure~\ref{fig:callback-map} illustrates the callback architecture showing data flow between UI components and the retrieval engine.
+\subsection{Project Structure}
 
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=0.85\textwidth]{Figures/callback_map.png}
-\caption{Callback architecture showing data flow between UI components and retrieval engine.}
-\label{fig:callback-map}
-\end{figure}
+The implementation follows a modular architecture organized around the RAG pattern:
 
-\subsection{Core Dependencies}
-
-The system uses established Python libraries, minimizing external dependencies:
-
-\begin{table}[!htbp]
-\centering
-\small
-\begin{tabular}{lll}
-\toprule
-\textbf{Library} & \textbf{Version} & \textbf{Purpose} \\
-\midrule
-dash & 2.18.2 & Web application framework \\
-pandas & 2.2.3 & Data processing \\
-numpy & 1.26.0 & Numerical operations \\
-scikit-learn & 1.6.1 & Similarity computation \\
-rank-bm25 & 0.2.2 & Keyword matching \\
-fuzzywuzzy & 0.18.0 & String similarity \\
-transformers & 4.48.0 & HuggingFace models \\
-torch & 2.2.2 & Neural networks \\
-\bottomrule
-\end{tabular}
-\caption{Core Python dependencies.}
-\label{tab:impl-dependencies}
-\end{table}
-
-\section{Application Bootstrap}
-
-The system follows a deterministic initialization sequence ensuring robust startup:
-
-\begin{lstlisting}[language=Python, caption={Bootstrap sequence (app.py)}, label={lst:bootstrap}]
-def boot() -> tuple[dash.Dash, RuleRetriever]:
-    """Initialize application components."""
-    app = create_app()
-    
-    # Database initialization
-    db_manager = DatabaseManager(
-        db_path="db/rules.db",
-        table_name="rules"
-    )
-    db_manager.init_db("data/validation_rules.csv")
-    
-    # Retriever with tuned weights
-    config = SearchConfig(
-        semantic_weight=0.80,  # LOOCV-tuned
-        bm25_weight=0.10,
-        fuzzy_weight=0.10,
-        min_similarity=0.30    # Semantic gate
-    )
-    
-    retriever = RuleRetriever(
-        embedding_manager=EmbeddingManager(),
-        config=config,
-        db_manager=db_manager
-    )
-    
-    # Register UI callbacks
-    register_callbacks(app, retriever)
-    return app, retriever
+\begin{lstlisting}[
+  language=bash, 
+  caption={Project directory structure}, 
+  label={lst:project-structure},
+  basicstyle=\ttfamily\small,
+  frame=single,
+  backgroundcolor=\color{gray!5},
+  xleftmargin=15pt,
+  framexleftmargin=15pt,
+  numbers=none
+]
+validation-rule-search/
+├── app.py                         # Main Dash application
+├── config.py                      # Configuration settings
+├── rag/                           # RAG implementation
+│   ├── embeddings/              # Embedding management
+│   │   ├── manager.py         # Model operations
+│   │   └── index.py           # Semantic search
+│   └── search/                  # Search implementation
+│       ├── retriever.py         # Hybrid retrieval
+│       ├── config.py            # Search configuration
+│       └── data.py              # Rule data loader
+├── db/                            # Database layer
+│   └── manager.py               # SQLite operations
+└── data/
+    └── validation_rules.csv       # Standardized corpus
 \end{lstlisting}
 
-\section{User Interface Implementation}
+\subsection{Architectural Overview}
 
-The UI provides dual interfaces for search and generation, unified in a responsive layout. The implementation uses Dash with Bootstrap components for a modern, professional appearance.
+The system implements a monolithic architecture where all components operate within a single Python process. This design eliminates network overhead between components and ensures deterministic behavior required for banking compliance. The retrieval pipeline processes queries through three parallel signals—semantic, BM25, and fuzzy—combining their normalized scores for final ranking.
 
-\subsection{Search Interface}
+\section{Core RAG Components}
 
-The search component offers faceted filtering and hybrid retrieval modes. As shown in Figure~\ref{fig:search-interface}, the interface includes natural language query input with debouncing, toggle between Keyword and Hybrid search modes, and real-time result updates as filters change.
+\subsection{Embedding Manager}
 
-\textbf{Interaction Modes:}
+The \texttt{EmbeddingManager} handles transformer-based embedding generation with attention-aware pooling, critical for accurate semantic representations:
 
-The system supports three distinct interaction modes to accommodate different user workflows:
-
-\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
-  \item \textbf{Search mode}: Query-driven retrieval with relevance ranking based on hybrid scoring
-  \item \textbf{Browse mode}: Filter-based exploration where users can view all rules matching specific criteria without entering a query
-  \item \textbf{Filtered search}: Query execution within a pre-filtered subset, combining both approaches
-\end{itemize}
-
-When no query is provided, filtered rules receive a score of 1.0, indicating perfect match to the filter criteria. This design choice ensures that users can explore the rule corpus by category even without knowing specific search terms—particularly valuable for QA teams reviewing all rules for a specific country or validation type.
-
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=0.9\textwidth]{Figures/full_search.png}
-\caption{Search interface with query input, filters panel, and mode selection.}
-\label{fig:search-interface}
-\end{figure}
-
-\subsection{Faceted Filtering}
-
-The system provides multi-select dropdowns for categorical refinement across Rule Type, Country, Business Type, and Party Agent dimensions, as illustrated in Figure~\ref{fig:search-filters}.
-
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=0.9\textwidth]{Figures/search_filters.png}
-\caption{Faceted filtering panel showing multi-select dropdowns for categorical refinement.}
-\label{fig:search-filters}
-\end{figure}
-
-\subsection{Search Results and Details}
-
-Results are presented as interactive cards with similarity scores and metadata badges. Each card is draggable for interaction with the generator component. Figure~\ref{fig:search-results} shows the result display format.
-
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=0.9\textwidth]{Figures/full_search_results.png}
-\caption{Search results showing ranked rule cards with similarity scores and metadata badges.}
-\label{fig:search-results}
-\end{figure}
-
-Clicking a rule card opens a detailed modal (Figure~\ref{fig:rule-details}) displaying complete rule information including Kotlin code, descriptions, error codes, and metadata tags.
-
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=0.85\textwidth]{Figures/rule_details.png}
-\caption{Rule detail modal displaying complete rule information.}
-\label{fig:rule-details}
-\end{figure}
-
-\subsection{Integrated Chat Interface}
-
-The system supports conversational interaction alongside traditional search, as demonstrated in Figure~\ref{fig:search-chat}. Users can drag rules from search results into the chat context for detailed exploration.
-
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=0.95\textwidth]{Figures/search_chat_example.png}
-\caption{Unified interface showing search results (left) and chat-based rule exploration (right).}
-\label{fig:search-chat}
-\end{figure}
-
-\section{Core Retrieval Components}
-
-\subsection{Embedding Management}
-
-The embedding manager handles UAE-Large-V1 model operations with attention-aware pooling:
-
-\begin{lstlisting}[language=Python, caption={Mean pooling implementation for embeddings}, label={lst:mean-pooling}]
+\begin{lstlisting}[
+  language=Python, 
+  caption={Attention-aware mean pooling for embeddings}, 
+  label={lst:mean-pooling},
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{blue}\bfseries,
+  commentstyle=\color{green!50!black},
+  stringstyle=\color{red!60!black},
+  frame=lines,
+  backgroundcolor=\color{gray!5},
+  xleftmargin=15pt,
+  framexleftmargin=15pt,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  numbersep=5pt
+]
 def _mean_pooling(self, model_output, attention_mask):
-    """Attention-mask-aware mean pooling."""
+    """Apply attention-mask-aware mean pooling."""
     token_embeddings = model_output.last_hidden_state
-    mask = attention_mask.unsqueeze(-1)
-    
+    mask = attention_mask.unsqueeze(-1).to(
+        dtype=token_embeddings.dtype
+    )
     # Sum only non-padding tokens
     sum_embeddings = (token_embeddings * mask).sum(dim=1)
     token_counts = mask.sum(dim=1).clamp(min=1e-9)
-    
     return sum_embeddings / token_counts
+
+def generate_embeddings(self, texts, batch_size=32, 
+                       use_cache=True):
+    """Generate L2-normalized embeddings for texts."""
+    if isinstance(texts, str):
+        texts = [texts]
+    
+    embeddings = []
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i:i + batch_size]
+        
+        # Check cache first
+        uncached = []
+        for t in batch:
+            if use_cache and t in self._embedding_cache:
+                embeddings.append(self._embedding_cache[t])
+            else:
+                uncached.append(t)
+        
+        if uncached:
+            # Encode batch
+            encoded = self.tokenizer(
+                uncached, padding=True, truncation=True,
+                return_tensors='pt', max_length=512
+            ).to(self.device)
+            
+            with torch.no_grad():
+                model_output = self.model(**encoded)
+                pooled = self._mean_pooling(
+                    model_output, 
+                    encoded["attention_mask"]
+                )
+                # L2 normalize for cosine similarity
+                normalized = F.normalize(pooled, p=2, dim=1)
+            
+            for j, t in enumerate(uncached):
+                vec = normalized[j].cpu()
+                if use_cache:
+                    self._embedding_cache[t] = vec
+                embeddings.append(vec)
+    
+    return torch.stack(embeddings).numpy()
 \end{lstlisting}
 
-This implementation ensures that padding tokens do not affect the final embedding representation, providing accurate semantic representations for variable-length inputs.
+\subsection{Embedding Index}
 
-\subsection{Hybrid Scoring}
+The \texttt{EmbeddingIndex} maintains pre-computed embeddings and performs efficient semantic search:
 
-The retriever implements per-query normalization with semantic gating:
+\begin{lstlisting}[
+  language=Python, 
+  caption={Semantic search via cosine similarity}, 
+  label={lst:semantic-search},
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{blue}\bfseries,
+  commentstyle=\color{green!50!black},
+  stringstyle=\color{red!60!black},
+  frame=lines,
+  backgroundcolor=\color{gray!5},
+  xleftmargin=15pt,
+  framexleftmargin=15pt,
+  numbers=left,
+  numberstyle=\tiny\color{gray}
+]
+def search(self, query: str, top_k: int = 5):
+    """Retrieve most similar rules to query."""
+    # Encode query (manager ensures L2 normalization)
+    query_emb = self.embedding_manager\
+                    .generate_embeddings(query)[0]
+    
+    # Cosine similarity via dot product 
+    # (vectors are normalized)
+    sims = self.embeddings @ query_emb
+    
+    # Efficient partial sort for top-k
+    k = min(top_k, len(self.metadata))
+    top_idx = np.argpartition(-sims, k - 1)[:k]
+    top_idx = top_idx[np.argsort(-sims[top_idx])]
+    
+    results = [(self.metadata[i], float(sims[i])) 
+               for i in top_idx]
+    return results
+\end{lstlisting}
 
-\begin{lstlisting}[language=Python, caption={Hybrid score computation with semantic gate}, label={lst:hybrid-scoring}]
-def _hybrid_scores(self, query, rules):
-    """Weighted combination with semantic gate."""
-    # Get raw scores from each signal
-    sem_raw = self._semantic_scores(query, rules)
-    bm25_raw = self._bm25_scores(query, rules)
-    fuzzy_raw = self._fuzzy_scores(query, rules)
+\subsection{Index Construction}
+
+The system builds two indices at startup in parallel—semantic and BM25. Fuzzy matching requires no index as it operates directly on rule names at query time:
+
+\begin{lstlisting}[
+  language=Python, 
+  caption={Parallel index construction at startup}, 
+  label={lst:parallel-indices},
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{blue}\bfseries,
+  commentstyle=\color{green!50!black},
+  stringstyle=\color{red!60!black},
+  frame=lines,
+  backgroundcolor=\color{gray!5},
+  xleftmargin=15pt,
+  framexleftmargin=15pt,
+  numbers=left,
+  numberstyle=\tiny\color{gray}
+]
+def _build_indices(self):
+    """Build semantic and BM25 indices in parallel.
+    Note: Fuzzy matching needs no index 
+          (computed at query time)."""
     
-    # Per-signal normalization to [0,1]
-    sem = self._normalize_per_prompt(sem_raw)
-    bm25 = self._normalize_per_prompt(bm25_raw)
-    fuzzy = self._normalize_per_prompt(fuzzy_raw)
-    
-    # Apply semantic gate (tau = 0.30)
-    for rule_id in sem:
-        if sem[rule_id] < 0.30:
-            sem[rule_id] = 0.0
-    
-    # Weighted combination
-    scores = {}
-    for rule in rules:
-        rid = rule["rule_id"]
-        scores[rid] = (
-            0.80 * sem.get(rid, 0.0) +
-            0.10 * bm25.get(rid, 0.0) +
-            0.10 * fuzzy.get(rid, 0.0)
+    def build_embedding_index():
+        self.embedding_index = EmbeddingIndex(
+            self.embedding_manager
         )
+        self.embedding_index.add_rules(self.rules)
+        logger.info(f"Embedding index built with "
+                   f"{len(self.rules)} rules")
     
-    return scores
+    def build_bm25_index():
+        # Extract and tokenize keywords
+        corpus = [r.get("keywords", "") 
+                 for r in self.rules]
+        tokenized = [kw.replace(",", " ").split() 
+                    if kw else [] 
+                    for kw in corpus]
+        
+        if tokenized and any(len(toks) > 0 
+                           for toks in tokenized):
+            self.bm25_index = BM25Okapi(tokenized)
+            self._bm25_keywords_len = len(tokenized)
+            logger.info(f"BM25 index built with "
+                       f"{len(tokenized)} docs")
+    
+    # Execute in parallel for faster startup
+    with ThreadPoolExecutor() as executor:
+        futures = [
+            executor.submit(build_embedding_index),
+            executor.submit(build_bm25_index)
+        ]
+        for f in futures:
+            f.result()
 \end{lstlisting}
 
-\section{Performance Optimizations}
+\subsection{Three Retrieval Signals}
 
-\subsection{Memory Management}
+The retriever implements three complementary scoring mechanisms:
 
-The implementation employs several strategies to minimize memory footprint:
+\begin{lstlisting}[
+  language=Python, 
+  caption={Three retrieval signals implementation}, 
+  label={lst:three-signals},
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{blue}\bfseries,
+  commentstyle=\color{green!50!black},
+  stringstyle=\color{red!60!black},
+  frame=lines,
+  backgroundcolor=\color{gray!5},
+  xleftmargin=15pt,
+  framexleftmargin=15pt,
+  numbers=left,
+  numberstyle=\tiny\color{gray}
+]
+def _semantic_scores(self, query: str, rules: List[dict]):
+    """Compute semantic similarity scores 
+       using embeddings."""
+    if self.embedding_index is None:
+        return {r["rule_id"]: 0.0 for r in rules}
+    
+    # Get all similarities from embedding index
+    results = self.embedding_index.search(
+        query, top_k=len(rules)
+    )
+    by_id = {r["rule_id"]: float(score) 
+            for r, score in results}
+    return {r["rule_id"]: by_id.get(r["rule_id"], 0.0) 
+            for r in rules}
 
-\begin{itemize}[leftmargin=*,itemsep=3pt,topsep=3pt]
-  \item \textbf{Float32 precision}: Reduces embedding memory by 50\% compared to float64
-  \item \textbf{Lazy loading}: Embeddings parsed from JSON only when accessed
-  \item \textbf{Shared arrays}: NumPy views prevent unnecessary copying
-  \item \textbf{Result limiting}: Candidate pools capped at 100 rules
-  \item \textbf{Garbage collection}: Explicit cleanup after batch operations
-\end{itemize}
+def _bm25_scores(self, query: str, rules: List[dict]):
+    """Compute BM25 keyword matching scores."""
+    if self.bm25_index is None:
+        return {r["rule_id"]: 0.0 for r in rules}
+    
+    # Tokenize query same as corpus
+    q_tokens = query.replace(",", " ").split()
+    scores = self.bm25_index.get_scores(q_tokens)
+    
+    # Map scores to rule IDs
+    id_to_pos = {r["rule_id"]: i 
+                for i, r in enumerate(self.rules)}
+    out = {}
+    for r in rules:
+        pos = id_to_pos.get(r["rule_id"])
+        out[r["rule_id"]] = float(scores[pos]) \
+                           if pos else 0.0
+    return out
 
-\subsection{Query Performance}
+def _fuzzy_scores(self, query: str, rules: List[dict]):
+    """Compute fuzzy string matching on rule names 
+       (no index required)."""
+    out = {}
+    for r in rules:
+        name = r.get("rule_name", "") or ""
+        # Partial ratio finds best substring match
+        score = fuzz.partial_ratio(
+            query.lower(), name.lower()
+        )
+        out[r["rule_id"]] = float(score) / 100.0
+    return out
+\end{lstlisting}
 
-Query latency breakdown shows consistent sub-100ms performance:
+\subsection{Hybrid Score Fusion}
 
-\begin{table}[!htbp]
+The system combines three signals with max normalization and convex weights:
+
+\begin{lstlisting}[
+  language=Python, 
+  caption={Hybrid score computation with normalization}, 
+  label={lst:hybrid-scoring},
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{blue}\bfseries,
+  commentstyle=\color{green!50!black},
+  stringstyle=\color{red!60!black},
+  frame=lines,
+  backgroundcolor=\color{gray!5},
+  xleftmargin=15pt,
+  framexleftmargin=15pt,
+  numbers=left,
+  numberstyle=\tiny\color{gray}
+]
+def _normalize_per_prompt(self, scores: Dict[str, float]):
+    """Normalize scores to [0, 1] relative to max."""
+    if not scores:
+        return scores
+    mx = max(scores.values())
+    if mx <= 0:
+        return {k: 0.0 for k in scores}
+    return {k: v / mx for k, v in scores.items()}
+
+def _hybrid_scores(self, query: str, rules: List[dict]):
+    """Weighted combination of three normalized signals."""
+    # Get normalized scores from each signal
+    sem = self._normalize_per_prompt(
+        self._semantic_scores(query, rules)
+    )
+    bm25 = self._normalize_per_prompt(
+        self._bm25_scores(query, rules)
+    )
+    fz = self._normalize_per_prompt(
+        self._fuzzy_scores(query, rules)
+    )
+    
+    # Ensure weights sum to 1.0 (convex combination)
+    w_sem = max(self.config.semantic_weight, 0.0)  # 0.80
+    w_kw = max(self.config.bm25_weight, 0.0)       # 0.10
+    w_fz = max(self.config.fuzzy_weight, 0.0)      # 0.10
+    sw = w_sem + w_kw + w_fz
+    if sw == 0:
+        w_sem = w_kw = w_fz = 1.0 / 3.0
+    else:
+        w_sem, w_kw, w_fz = w_sem/sw, w_kw/sw, w_fz/sw
+    
+    # Combine with tuned weights
+    out = {}
+    for r in rules:
+        rid = r["rule_id"]
+        out[rid] = (w_sem * sem.get(rid, 0.0) + 
+                   w_kw * bm25.get(rid, 0.0) + 
+                   w_fz * fz.get(rid, 0.0))
+    return out
+\end{lstlisting}
+
+\section{Search Pipeline}
+
+The main search entry point orchestrates filtering, scoring, and ranking:
+
+\begin{lstlisting}[
+  language=Python, 
+  caption={Main search pipeline}, 
+  label={lst:search-pipeline},
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{blue}\bfseries,
+  commentstyle=\color{green!50!black},
+  stringstyle=\color{red!60!black},
+  frame=lines,
+  backgroundcolor=\color{gray!5},
+  xleftmargin=15pt,
+  framexleftmargin=15pt,
+  numbers=left,
+  numberstyle=\tiny\color{gray}
+]
+def search_rules(self, query=None, rule_type=None, 
+                country=None, business_type=None, 
+                party_agent=None, mode=SearchMode.HYBRID, 
+                top_k=10):
+    """Main search entry point."""
+    
+    # Step 1: Apply categorical filters
+    rules = self._apply_filters(
+        self.rules, rule_type=rule_type, 
+        country=country, business_type=business_type, 
+        party_agent=party_agent
+    )
+    
+    if not rules:
+        return []
+    
+    # Step 2: Handle browse mode (no query)
+    if not query:
+        return rules[:top_k]
+    
+    # Step 3: Compute scores based on mode
+    if mode == SearchMode.SEMANTIC:
+        scores = self._semantic_scores(query, rules)
+    elif mode == SearchMode.KEYWORD:
+        scores = self._bm25_scores(query, rules)
+    elif mode == SearchMode.FUZZY:
+        scores = self._fuzzy_scores(query, rules)
+    else:  # HYBRID
+        scores = self._hybrid_scores(query, rules)
+    
+    # Step 4: Apply minimum similarity threshold (0.30)
+    scores_vec = [scores.get(r["rule_id"], 0.0) 
+                 for r in rules]
+    results = [dict(r, search_score=s) 
+              for r, s in zip(rules, scores_vec)
+              if s >= self.config.min_similarity]
+    
+    # Step 5: Sort by score and return top-k
+    results.sort(
+        key=lambda r: r["search_score"], 
+        reverse=True
+    )
+    return results[:top_k]
+\end{lstlisting}
+
+\section{User Interface}
+
+\subsection{Search Interface}
+
+\vspace{0.5em}
+\noindent
+\begin{minipage}{\textwidth}
 \centering
-\begin{tabular}{lrr}
-\toprule
-\textbf{Operation} & \textbf{Time (ms)} & \textbf{Optimization} \\
-\midrule
-Filter application & 5 & SQLite indices \\
-BM25 scoring & 20 & Pre-computed IDF \\
-Fuzzy matching & 15 & Cached lowercasing \\
-Semantic search & 10 & Matrix multiplication \\
-Normalization & 5 & Vectorized operations \\
-Hybrid scoring & 5 & NumPy broadcasting \\
-Ranking & 2 & Partial sort \\
-\midrule
-\textbf{Total} & \textbf{62} & \textbf{Well within target} \\
-\bottomrule
-\end{tabular}
-\caption{Query latency breakdown showing sub-100ms performance.}
-\label{tab:query-performance}
-\end{table}
+\includegraphics[width=0.9\textwidth]{Figures/full_search.png}
+\captionof{figure}{Search interface with query input, mode toggle (Keyword/Hybrid), and filter panel.}\label{fig:search-interface}
+\end{minipage}
+\vspace{0.5em}
 
-\section{Configuration Management}
+\subsection{Faceted Filtering}
 
-System configuration is centralized in a single file with clear parameter definitions:
+\vspace{0.5em}
+\noindent
+\begin{minipage}{\textwidth}
+\centering
+\includegraphics[width=0.9\textwidth]{Figures/search_filters.png}
+\captionof{figure}{Multi-select filtering across Rule Type, Country, Business Type, and Party Agent.}\label{fig:search-filters}
+\end{minipage}
+\vspace{0.5em}
 
-\begin{lstlisting}[language=Python, caption={Configuration settings (config.py)}, label={lst:config}]
-# Application settings
-APP_TITLE = "Validation Rules Search Engine"
-DEBUG = 1
-HOST = "127.0.0.1"
-PORT = 8050
+\subsection{Search Results}
 
-# Search weights (LOOCV-tuned)
-SEMANTIC_WEIGHT = 0.8
-BM25_WEIGHT = 0.1
-FUZZY_WEIGHT = 0.1
+\vspace{0.5em}
+\noindent
+\begin{minipage}{\textwidth}
+\centering
+\includegraphics[width=0.9\textwidth]{Figures/full_search_results.png}
+\captionof{figure}{Ranked rule cards with similarity scores and categorical badges.}\label{fig:search-results}
+\end{minipage}
+\vspace{0.5em}
 
-# Semantic gate threshold
-MIN_SIMILARITY = 0.3
+\subsection{Rule Details}
 
-# Model configuration
-EMBEDDING_MODEL = "models/embeddings/UAE-Large-V1"
+\vspace{0.5em}
+\noindent
+\begin{minipage}{\textwidth}
+\centering
+\includegraphics[width=0.85\textwidth]{Figures/rule_details.png}
+\captionof{figure}{Detailed rule view with code, descriptions, and metadata.}\label{fig:rule-details}
+\end{minipage}
+\vspace{0.5em}
 
-# Database settings
-SQLITE_DB_PATH = "db/rules.db"
-CSV_DATA_PATH = "data/validation_rules.csv"
-\end{lstlisting}
+\subsection{Unified Interface}
 
-\section{Implementation Challenges}
-
-Several challenges were encountered and resolved during implementation:
-
-\subsection{Startup Latency}
-
-\textbf{Challenge}: Building indices for 1,157 rules adds approximately 600ms to startup time.
-
-\textbf{Solution}: Implemented parallel index construction using ThreadPoolExecutor, reducing initialization time by 40\%. Indices are built once at startup and reused for all queries.
-
-\subsection{Memory Usage}
-
-\textbf{Challenge}: Full-precision embeddings require 9.5MB for 1,157 rules.
-
-\textbf{Solution}: Adopted float32 precision (4.7MB) and lazy loading from JSON storage. Embeddings are loaded once and shared across all requests using NumPy views.
-
-\subsection{Database Concurrency}
-
-\textbf{Challenge}: SQLite database locks under concurrent access patterns.
-
-\textbf{Solution}: Configured WAL (Write-Ahead Logging) mode for concurrent reads, implemented busy timeout with retry logic, and minimized write operations after initialization.
+\vspace{0.5em}
+\noindent
+\begin{minipage}{\textwidth}
+\centering
+\includegraphics[width=0.95\textwidth]{Figures/search_chat_example.png}
+\captionof{figure}{Combined search and conversational exploration interface.}\label{fig:search-chat}
+\end{minipage}
+\vspace{0.5em}
 
 \section{Summary}
 
-The implementation successfully delivers a hybrid retrieval system within strict operational constraints. Through careful architectural decisions and practical optimizations, we achieve:
+The implementation demonstrates that sophisticated RAG capabilities can be delivered through pragmatic engineering within banking constraints. Key achievements include:
 
-\begin{itemize}[leftmargin=*,itemsep=3pt,topsep=3pt]
-  \item Complete functionality in approximately 2,500 lines of Python
-  \item Sub-100ms query latency for typical searches
-  \item Memory footprint under 256MB total
-  \item Zero external dependencies beyond Python libraries
-  \item Maintainable architecture with clear module boundaries
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+  \item Three complementary retrieval signals with empirically tuned weights (80\% semantic, 10\% BM25, 10\% fuzzy)
+  \item Parallel index construction at startup for semantic and BM25, with fuzzy computed at query time
+  \item Attention-aware embeddings ensuring accurate semantic representation
+  \item Efficient score fusion through max normalization maintaining convex weight properties
+  \item Complete retrieval pipeline in approximately 1,500 lines of core Python
 \end{itemize}
 
-The system demonstrates that enterprise-grade retrieval can be achieved through thoughtful engineering within constraints, validating our hypothesis that complex infrastructure is not required when requirements are well-understood and constraints are properly addressed.
+By building only necessary indices at startup and computing fuzzy scores at query time, we balance initialization speed with query performance. The system achieves production-ready retrieval while maintaining simplicity and auditability required for banking deployment.

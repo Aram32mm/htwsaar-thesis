@@ -1,11 +1,44 @@
 \chapter{Corpus Analysis}
 \label{ch:corpus-analysis}
 
-This chapter presents a comprehensive analysis of the standardized validation rule corpus used in our retrieval system. Through systematic examination of 1,157 rules consolidated from Deutsche Bank's eBridge-EU platform, we assess field completeness, data quality, and embedding characteristics to understand the corpus's strengths and identify areas for improvement.
+This chapter presents a comprehensive analysis of the standardized validation rule corpus used in our retrieval system. Through systematic examination of 1,157 rules consolidated from Deutsche Bank's payment processing platform, we assess field completeness, data quality, and embedding characteristics to understand the corpus's strengths and identify areas for improvement.
+
+\section{Data Consolidation and Enhancement}
+
+\subsection{Multi-Source Consolidation}
+
+The corpus was constructed by consolidating three separate CSV files from different validation subsystems, each containing partially overlapping rule sets with inconsistent formats. The consolidation process involved:
+
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+ \item \textbf{Source integration}: Merged 1,743 total rules from three CSV sources
+ \item \textbf{Deduplication}: Identified and removed 586 duplicate rules using \texttt{rule\_name} as the unique identifier
+ \item \textbf{Schema alignment}: Mapped heterogeneous field names to standardized schema
+ \item \textbf{Conflict resolution}: For duplicate rules, retained the version with most complete fields
+ \item \textbf{Final corpus}: 1,157 unique validation rules
+\end{itemize}
+
+\subsection{LLM-Based Field Generation}
+
+After consolidation, we enhanced the corpus using Gemini-2.5-Pro in an offline batch process. The model received three core fields from the original data:
+
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+ \item \texttt{rule\_name}: The human-readable identifier
+ \item \texttt{rule\_description}: Basic business description (when available)
+ \item \texttt{rule\_code}: The actual Kotlin validation implementation
+\end{itemize}
+
+From these inputs, Gemini-2.5-Pro generated three enhanced fields:
+
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+ \item \textbf{\texttt{llm\_description}}: Comprehensive natural language description averaging 89 words, synthesizing the rule's purpose, validation logic, and business context
+ \item \textbf{\texttt{keywords}}: Extracted and curated search terms relevant to the rule, averaging 11.6 keywords per rule
+ \item \textbf{Categorical tags}: Scraped and structured \texttt{rule\_type}, \texttt{country}, \texttt{business\_type}, and \texttt{party\_agent} values from unstructured text
+\end{itemize}
+
+This offline enhancement process transformed sparse original data into rich, searchable content that forms the foundation of our retrieval system.
 
 \section{Corpus Overview}
-
-The standardized corpus comprises 1,157 validation rules consolidated from multiple distributed sources across the eBridge-EU system. Each rule occupies a single row in our CSV format, with 15 fields capturing identifiers, descriptions, error codes, search metadata, and pre-computed embeddings. The complete dataset requires 32.21 MB of memory when loaded, making it suitable for in-memory processing on standard hardware.
+The standardized corpus comprises 1,157 validation rules consolidated from multiple distributed sources across the payment processing system. Each rule occupies a single row in our CSV format, with 15 fields capturing identifiers, descriptions, error codes, search metadata, and pre-computed embeddings. The complete dataset requires 32.21 MB of memory when loaded, making it suitable for in-memory processing on standard hardware.
 
 \subsection{Field Structure}
 
@@ -48,7 +81,7 @@ Embeddings & 1 \\
 
 \section{Field Completeness Analysis}
 
-Field completeness directly impacts retrieval effectiveness. Our analysis categorizes fields by their role in the system and evaluates coverage against operational requirements.
+The LLM enhancement process dramatically improved field completeness, particularly for search-critical fields. While the original consolidated data had significant gaps, the Gemini-2.5-Pro generation achieved 100\% coverage for keywords and enhanced descriptions.
 
 \subsection{Critical Field Coverage}
 
@@ -288,33 +321,33 @@ Categorical Tags & 55.6 & 0.10 & 5.6 \\
 
 Based on impact to retrieval quality and user experience:
 
-\begin{enumerate}[leftmargin=*,itemsep=4pt,topsep=4pt]
- \item \textbf{\fcolorbox{red}{red!20}{\textcolor{red}{CRITICAL}} -- Standardize Categorical Tags}
-   \begin{itemize}[leftmargin=*,itemsep=1pt,topsep=1pt]
+\begin{enumerate}[leftmargin=*,itemsep=6pt,topsep=4pt]
+ \item \textbf{\textcolor{red}{CRITICAL} — Standardize Categorical Tags}
+   \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
      \item Reduce rule types from 177 to 20 standard categories
      \item Apply ISO 3166 country codes consistently  
      \item Define clear business type taxonomy (target: 30 types)
      \item Create hierarchical party agent structure
    \end{itemize}
    
- \item \textbf{\fcolorbox{orange}{orange!20}{\textcolor{orange}{HIGH}} -- Expand Tag Coverage}
-   \begin{itemize}[leftmargin=*,itemsep=1pt,topsep=1pt]
-     \item Increase country tags from 48.7\% to 75\%
-     \item Expand business type from 36.5\% to 80\%
+ \item \textbf{\textcolor{orange}{HIGH} — Expand Tag Coverage}
+   \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+     \item Increase country tags from 48.7 \% to 75 \%
+     \item Expand business type from 36.5 \% to 80 \%
      \item Validate existing tag accuracy through sampling
    \end{itemize}
    
- \item \textbf{\fcolorbox{yellow}{yellow!20}{\textcolor{yellow!80!black}{MEDIUM}} -- Enhance Multilingual Support}
-   \begin{itemize}[leftmargin=*,itemsep=1pt,topsep=1pt]
-     \item Complete German descriptions (currently 51.3\%)
-     \item Complete English descriptions (currently 51.3\%)
+ \item \textbf{\textcolor{yellow!50!black}{MEDIUM} — Enhance Multilingual Support}
+   \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+     \item Complete German descriptions (currently 51.3 \%)
+     \item Complete English descriptions (currently 51.3 \%)
      \item Ensure consistency between language variants
    \end{itemize}
    
- \item \textbf{\fcolorbox{green}{green!20}{\textcolor{green!60!black}{LOW}} -- Complete Optional Fields}
-   \begin{itemize}[leftmargin=*,itemsep=1pt,topsep=1pt]
-     \item BANSTA error codes (currently 51.2\%)
-     \item ISO error codes (currently 50.0\%)
+ \item \textbf{\textcolor{green!50!black}{LOW} — Complete Optional Fields}
+   \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+     \item BANSTA error codes (currently 51.2 \%)
+     \item ISO error codes (currently 50.0 \%)
      \item Additional metadata for audit trails
    \end{itemize}
 \end{enumerate}

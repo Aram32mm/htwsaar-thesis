@@ -6,7 +6,7 @@ This chapter positions our validation rule retrieval system within the broader l
 
 \subsection{Lexical Retrieval}
 
-BM25 remains the dominant lexical retrieval method since its emergence from Robertson and Spärck Jones's probabilistic ranking framework \cite{robertson1976relevance,robertson1994okapi}. While Robertson et al. \cite{robertson2009bm25} provided theoretical justification, practical improvements remain elusive. Trotman et al. \cite{trotman2014improvements} found default parameters rarely optimal, motivating our empirical tuning to $k_1=1.5, b=0.3$ for keyword fields.
+BM25 remains the dominant lexical retrieval method since its emergence from Robertson and Spärck Jones's probabilistic ranking framework \cite{robertson1976relevance,robertson1994okapi}. While Robertson et al. \cite{robertson2009bm25} provided theoretical justification, practical improvements remain elusive. Trotman et al. \cite{trotman2014improvements} found default parameters rarely optimal, though our implementation uses the standard BM25Okapi defaults as our keyword fields are already curated and consistent.
 
 Our application of BM25 to curated keyword fields rather than full text aligns with Kim et al. \cite{kim2019structured}, who demonstrated superior performance on high-quality metadata. Unlike their focus on academic abstracts, we apply this principle to expert-curated regulatory keywords.
 

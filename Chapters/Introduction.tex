@@ -1,7 +1,7 @@
 \chapter{Introduction}\label{ch:introduction}
 
 \section{Background and Motivation}
-Modern payment platforms process millions of transactions daily, each subject to complex validation rules that protect customers, reduce operational risk, and ensure regulatory compliance. At Deutsche Bank's eBridge-EU system, these validation rules span from simple field validations (mandatory characters, allowed value sets) to intricate domain-specific constraints (country-specific limits, routing conditions, SWIFT/ISO message-format requirements). With hundreds of rules evolving continuously across distributed teams and systems, developers and quality assurance teams face a critical challenge: quickly finding and understanding the exact rules relevant to their current task.
+Modern payment platforms process millions of transactions daily, each subject to complex validation rules that protect customers, reduce operational risk, and ensure regulatory compliance. At Deutsche Bank's payment processing platform, these validation rules span from simple field validations (mandatory characters, allowed value sets) to intricate domain-specific constraints (country-specific limits, routing conditions, SWIFT/ISO message-format requirements). With hundreds of rules evolving continuously across distributed teams and systems, developers and quality assurance teams face a critical challenge: quickly finding and understanding the exact rules relevant to their current task.
 
 Traditional keyword search fails this use case. Rules are described inconsistently across teams, terminology overlaps, and natural language queries rarely match the exact vocabulary in rule documentation. A developer asking about ``EUR cross-border limits'' might miss rules titled ``SEPA maximum amount validation'' despite their relevance. Moreover, rule data is often scattered across multiple systems, with inconsistent formats and outdated versions. Simultaneously, banking environments impose strict architectural constraints: no external API calls, limited infrastructure dependencies, and complete audit trails for all data access.
 
@@ -103,7 +103,7 @@ label/.style={font=\scriptsize, text=gray!70}
 };
 
 % User query enters from left
-\node[querynode] (query) at (-5,-5.5) {
+\node[querynode] (query) at (-7.5,-5.5) {
 \textbf{User Query}\\
 \scriptsize Natural language\\
 \scriptsize + Facet filters
@@ -186,7 +186,7 @@ label/.style={font=\scriptsize, text=gray!70}
 % Performance annotation
 \node[draw=red!60, fill=red!5, rounded corners, anchor=east, 
     font=\scriptsize, align=center, minimum width=2.5cm] 
-    at (-6,-11) {
+    at (-6.7,-11) {
 \textbf{Performance}\\
 P95 < 1000ms\\
 MRR@5: 48.2\%
@@ -224,11 +224,12 @@ s_{\text{hybrid}} = 0.10\,\widehat{s}_{\text{kw}} + 0.10\,\widehat{s}_{\text{fuz
 
 We then apply a relevance threshold to filter low-confidence results across all modes:
 \[
-\boxed{ \; s_{\text{final}} = \begin{cases}
-s_{\text{mode}} & \text{if } s_{\text{mode}} \ge \tau \\
-0 & \text{otherwise}
+s_{\mathrm{final}} =
+\begin{cases}
+s_{\mathrm{mode}}, & \text{if } s_{\mathrm{mode}} \ge \tau,\\
+0,                 & \text{otherwise},
 \end{cases}
-\quad \text{with} \quad \tau = 0.30 \; }
+\qquad \tau = 0.30.
 \]
 where $s_{\text{mode}}$ is either $s_{\text{kw}}$ for Keyword mode or $s_{\text{hybrid}}$ for Hybrid mode. These weights maximize Mean Reciprocal Rank at 5 (MRR@5) on our evaluation dataset (30 manually annotated query-rule pairs), improving from 43.4\% (initial weights) to 48.2\% (tuned weights). While the evaluation set is limited in size, each annotation was carefully validated to ensure high quality.
 

@@ -1,410 +1,252 @@
 \chapter{System Design}
 \label{ch:system-design}
 
-This chapter presents the architectural design of our hybrid retrieval system for Kotlin validation rules. We detail the monolithic architecture, component interactions, data flow pipelines, and design decisions that enable sub-second retrieval latency while maintaining strict compliance with banking infrastructure constraints. The system operates without external dependencies, implements deterministic retrieval algorithms, and provides comprehensive audit trails for regulatory compliance.
+This chapter presents the architectural design of our hybrid retrieval system for validation rules, detailing how we achieve sub-second semantic search within banking infrastructure constraints through a deliberately simple monolithic architecture.
 
 \section{Architectural Overview}
 
-The system implements a monolithic Python architecture optimized for deployment in restricted banking environments. This design choice reflects operational constraints: no external vector databases, no query-time LLM calls, and no distributed dependencies. All components run within a single Dash application process, sharing memory-efficient data structures and eliminating network overhead.
+\subsection{Design Philosophy}
 
-\subsection{Design Principles}
+The system implements a monolithic architecture where all components operate within a single Python process. This design choice, initially driven by deployment constraints, proved optimal for our use case by eliminating network overhead, simplifying debugging, and ensuring deterministic behavior required for audit compliance.
 
-Our architecture adheres to five core principles that guide all implementation decisions:
+The architecture comprises three logical layers:
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+  \item \textbf{Presentation Layer}: Dash web interface with search and chat components
+  \item \textbf{Business Logic Layer}: Hybrid retrieval engine with three scoring signals
+  \item \textbf{Data Layer}: CSV corpus with SQLite caching and in-memory indices
+\end{itemize}
+
+All layers execute within the same process, communicating through direct function calls rather than network protocols.
+
+\subsection{Core Components}
+
+The system consists of five major components that work together to provide rule retrieval:
 
 \begin{enumerate}[leftmargin=*,itemsep=2pt,topsep=2pt]
-  \item \textbf{Self-Contained Operation}: Complete functionality without external services, enabling deployment in air-gapped environments
-  \item \textbf{Deterministic Retrieval}: Reproducible results for audit compliance, with all randomness eliminated from scoring
-  \item \textbf{Memory Efficiency}: In-memory indices for 1,157 rules maintained within modest memory footprint through careful data structure selection
-  \item \textbf{Graceful Degradation}: Individual component failures do not cascade; fallback to keyword search if embeddings unavailable
-  \item \textbf{Transparent Processing}: Full explainability of ranking decisions through stored score breakdowns
+  \item \textbf{RuleRetriever}: Orchestrates hybrid search by combining semantic, BM25, and fuzzy signals
+  \item \textbf{EmbeddingManager}: Manages UAE-Large-V1 model for semantic similarity computation
+  \item \textbf{EmbeddingIndex}: Maintains pre-computed embeddings and performs cosine similarity search
+  \item \textbf{DatabaseManager}: Handles SQLite operations for filtering and metadata
+  \item \textbf{RuleDataLoader}: Normalizes CSV data into memory-efficient structures
 \end{enumerate}
-
-\subsection{Monolithic Architecture}
-
-The system adopts a monolithic architecture where all components operate within a single Dash application process, as illustrated in Figure~\ref{fig:monolithic-architecture}.
-
-\begin{figure}[!htbp]
-\centering
-\begin{tikzpicture}[
-  >=latex,
-  node distance=1.8cm,
-  component/.style={rectangle, draw, minimum width=4cm, minimum height=1.2cm, align=center, font=\small},
-  ui/.style={component, fill=blue!20},
-  engine/.style={component, fill=green!20},
-  data/.style={component, fill=orange!20},
-  storage/.style={component, fill=orange!10},
-  arrow/.style={->, thick},
-  label/.style={font=\footnotesize\bfseries, text=gray}
-]
-
-% Center the RAG Engine first
-\node[engine] (rag) at (0,0) {RAG Engine\\{\scriptsize Retriever, Embeddings, Scorer}};
-
-% UI Layer - positioned above RAG
-\node[ui] (search) at (-2.5,2) {Search UI\\{\scriptsize Filters, Results}};
-\node[ui] (generator) at (2.5,2) {Generator UI\\{\scriptsize Chat, Upload}};
-
-% Data Layer - positioned below RAG
-\node[data] (sqlite) at (0,-2) {SQLite Cache\\{\scriptsize Rules, Metadata}};
-\node[storage] (csv) at (0,-4) {CSV Corpus\\{\scriptsize 1,157 Rules}};
-
-% Connections
-\draw[arrow] (search) -- (rag);
-\draw[arrow] (generator) -- (rag);
-\draw[arrow, <->] (search) -- (generator);
-\draw[arrow] (rag) -- (sqlite);
-\draw[arrow] (sqlite) -- (csv);
-
-% Layer labels on the left
-\node[label, anchor=east] at (-5,2) {Presentation Layer};
-\node[label, anchor=east] at (-5,0) {Business Logic};
-\node[label, anchor=east] at (-5,-2) {Data Access};
-\node[label, anchor=east] at (-5,-4) {Storage};
-
-% Process boundary
-\draw[dashed, thick, rounded corners=10pt, draw=gray!60] 
-  (-5.5,3.5) rectangle (5.5,-5) 
-
-\node[font=\small\bfseries, anchor=north west] at (-5.3,3.3) {Single Dash Process};
-
-\end{tikzpicture}
-\caption{Monolithic architecture with centralized RAG engine. All components run in a single Dash process, with the UI layer handling user interaction, the RAG engine managing retrieval logic, and the data layer providing persistent storage.}
-\label{fig:monolithic-architecture}
-\end{figure}
-
-The monolithic design offers several advantages for our use case:
-
-\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
-  \item \textbf{Simplified Deployment}: Single Python application with standard library dependencies
-  \item \textbf{Shared Memory}: Indices and embeddings loaded once, accessible to all components
-  \item \textbf{No Network Latency}: All communication happens through function calls
-  \item \textbf{Atomic Updates}: Corpus changes require simple application restart
-  \item \textbf{Audit Compliance}: Single process simplifies logging and monitoring
-\end{itemize}
 
 \section{Data Flow Architecture}
 
-\subsection{Startup Initialization}
+\subsection{Initialization Sequence}
 
-The system follows a deterministic initialization sequence at application startup:
+At startup, the system executes a deterministic initialization pipeline:
 
-\begin{figure}[ht]
-\centering
-\begin{tikzpicture}[
-  >=latex,
-  node distance=1.2cm,
-  process/.style={rectangle, draw, minimum width=4cm, minimum height=0.8cm, align=center},
-  data/.style={cylinder, draw, shape border rotate=90, minimum width=2cm, minimum height=1cm, align=center},
-  arrow/.style={->, thick}
-]
+\begin{enumerate}[leftmargin=*,itemsep=2pt,topsep=2pt]
+  \item Load CSV corpus (32.21MB) using pandas
+  \item Validate schema and field presence
+  \item Parse JSON-encoded embeddings to NumPy arrays
+  \item Build SQLite database for filtering
+  \item Construct BM25 index from keywords field
+  \item Initialize embedding index with pre-computed vectors
+  \item Start Dash web server
+\end{enumerate}
 
-% Startup sequence
-\node[data] (csv) {CSV Corpus};
-\node[process, below=of csv] (parse) {Parse \& Validate};
-\node[process, below=of parse] (sqlite) {Load SQLite};
-\node[process, below=of sqlite] (embeddings) {Parse Embeddings\\{\scriptsize JSON → numpy}};
-\node[process, below=of embeddings] (normalize) {L2 Normalize};
-\node[process, below=of normalize] (indices) {Build Indices\\{\scriptsize BM25, Fuzzy, Semantic}};
-\node[process, below=of indices] (cache) {Cache Metadata};
-\node[process, below=of cache] (ready) {System Ready};
+Total initialization time: 464ms for 1,157 rules.
 
-% Flow
-\draw[arrow] (csv) -- (parse);
-\draw[arrow] (parse) -- (sqlite);
-\draw[arrow] (sqlite) -- (embeddings);
-\draw[arrow] (embeddings) -- (normalize);
-\draw[arrow] (normalize) -- (indices);
-\draw[arrow] (indices) -- (cache);
-\draw[arrow] (cache) -- (ready);
+\subsection{Query Processing Pipeline}
 
-\end{tikzpicture}
-\caption{Startup initialization sequence. The process loads the CSV, validates data integrity, parses embeddings from JSON, builds all search indices, and caches metadata for fast access.}
-\label{fig:startup-sequence}
-\end{figure}
+When a user submits a search query, the system follows this processing flow:
 
-Key initialization steps:
-\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
-  \item \textbf{CSV Loading}: Read and validate the standardized corpus
-  \item \textbf{Embedding Parsing}: Convert JSON strings to numpy arrays
-  \item \textbf{Index Building}: Construct BM25, fuzzy, and semantic indices in memory
-  \item \textbf{Metadata Caching}: Pre-compute filter options and statistics
-\end{itemize}
-
-\subsection{Query-Time Data Flow}
-
-Once initialized, the system processes queries through a multi-stage pipeline:
-
-\begin{figure}[ht]
-\centering
-\begin{tikzpicture}[
-  >=latex,
-  thick,
-  node distance=1cm,
-  process/.style={rectangle, draw, minimum width=3cm, minimum height=0.8cm, align=center, font=\small},
-  parallel/.style={process, fill=yellow!20},
-  merge/.style={process, fill=green!20},
-  arrow/.style={->, thick}
-]
-
-% Query input
-\node[process] (query) {User Query};
-
-% Filter application
-\node[process, below=of query] (filter) {Apply Filters\\{\scriptsize Rule Type, Country, etc.}};
-
-% Parallel retrieval
-\node[parallel, below left=1.5cm and 2cm of filter] (bm25) {BM25\\{\scriptsize Keywords}};
-\node[parallel, below=1.5cm of filter] (fuzzy) {Fuzzy\\{\scriptsize Rule Names}};
-\node[parallel, below right=1.5cm and 2cm of filter] (semantic) {Semantic\\{\scriptsize Embeddings}};
-
-% Score normalization
-\node[process, below=1.5cm of fuzzy] (normalize) {Per-Signal\\Normalization};
-
-% Hybrid scoring
-\node[merge, below=of normalize] (hybrid) {Hybrid Scoring\\{\scriptsize w=[0.10, 0.10, 0.80]}};
-
-% Semantic gate
-\node[process, below=of hybrid] (gate) {Semantic Gate\\{\scriptsize $\tau$=0.30}};
-
-% Ranking
-\node[process, below=of gate] (rank) {Rank \& Select\\{\scriptsize Top-k=10}};
-
-% Results
-\node[process, below=of rank] (results) {Format Results};
-
-% Connections
-\draw[arrow] (query) -- (filter);
-\draw[arrow] (filter) -- (bm25);
-\draw[arrow] (filter) -- (fuzzy);
-\draw[arrow] (semantic) |- (normalize);
-\draw[arrow] (bm25) |- (normalize);
-\draw[arrow] (fuzzy) -- (normalize);
-\draw[arrow] (normalize) -- (hybrid);
-\draw[arrow] (hybrid) -- (gate);
-\draw[arrow] (gate) -- (rank);
-\draw[arrow] (rank) -- (results);
-
-\end{tikzpicture}
-\caption{Query-time data flow with parallel retrieval and sequential scoring. The three retrieval signals operate independently before normalization and combination.}
-\label{fig:query-flow}
-\end{figure}
+\begin{enumerate}[leftmargin=*,itemsep=2pt,topsep=2pt]
+  \item \textbf{Filter Application}: Reduce candidate set based on categorical selections
+  \item \textbf{Parallel Signal Computation}:
+     \begin{itemize}
+       \item Semantic: Cosine similarity via embedding dot product (2.4ms)
+       \item BM25: Probabilistic retrieval over keywords (1.2ms)
+       \item Fuzzy: String similarity on rule names (19.4ms)
+     \end{itemize}
+  \item \textbf{Score Normalization}: Max-normalize each signal to [0,1]
+  \item \textbf{Weighted Fusion}: Combine with weights (0.80, 0.10, 0.10)
+  \item \textbf{Threshold Application}: Filter results below τ=0.30
+  \item \textbf{Ranking}: Sort by combined score
+  \item \textbf{Result Assembly}: Enrich with metadata and return top-k
+\end{enumerate}
 
 \section{Component Design}
 
-\subsection{Retrieval Components}
+\subsection{Retrieval Engine}
 
-The system implements three complementary retrieval signals, each targeting different aspects of the search space:
+The retrieval engine implements three complementary scoring mechanisms:
 
-\subsubsection{BM25 Component}
-Provides lexical matching over the curated keywords field using standard BM25 scoring with term frequency saturation and document length normalization. The implementation uses the \texttt{rank-bm25} library with default parameters.
-
-\subsubsection{Fuzzy Matching Component}
-Handles variations in rule naming through token-set ratio matching, which is order-independent and robust to minor spelling variations. This component catches rules that users might remember imprecisely.
-
-\subsubsection{Semantic Component}
-Dense retrieval using cosine similarity over L2-normalized embeddings. Since all embeddings are pre-normalized at startup, cosine similarity reduces to a simple dot product, enabling efficient matrix multiplication.
-
-\subsection{Hybrid Scoring Design}
-
-The hybrid scorer combines signals through a three-stage process:
-
-\subsubsection{Per-Signal Normalization}
-Each signal's scores are normalized independently to $[0,1]$ using min-max normalization:
-
-\begin{align}
-\hat{s}_i &= \frac{s_i - \min_j(s_j)}{\max_j(s_j) - \min_j(s_j)}
-\end{align}
-
-This ensures fair combination despite different score distributions across signals.
-
-\subsubsection{Semantic Gating}
-Low-relevance semantic matches are filtered to reduce noise:
-
-\begin{align}
-s'_{\text{sem}} &= \begin{cases}
-  \hat{s}_{\text{sem}} & \text{if } \hat{s}_{\text{sem}} \geq \tau \\
-  0 & \text{otherwise}
-\end{cases}
-\end{align}
-
-with $\tau = 0.30$ determined empirically through evaluation.
-
-\subsubsection{Weighted Combination}
-Final scores use LOOCV-optimized weights:
-
-\begin{align}
-s_{\text{hybrid}} &= 0.10 \cdot \hat{s}_{\text{bm25}} + 0.10 \cdot \hat{s}_{\text{fuzzy}} + 0.80 \cdot s'_{\text{sem}}
-\end{align}
-
-\section{User Interface Design}
-
-\subsection{Dash Application Architecture}
-
-The UI layer implements a reactive single-page application using Dash:
-
-\begin{table}[ht]
-\centering
-\begin{tabular}{ll}
-\toprule
-\textbf{Component} & \textbf{Function} \\
-\midrule
-Search Bar & Natural language query input with debouncing \\
-Mode Selector & Toggle between Keyword and Hybrid modes \\
-Facet Filters & Dropdowns for Rule Type, Country, Business Type, Party Agent \\
-Results Panel & Ranked cards with badges, scores, and code display \\
-Explanation Panel & Grounded explanations from stored fields \\
-Metrics Footer & Query latency and result count display \\
-\bottomrule
-\end{tabular}
-\caption{UI components in the Dash application providing comprehensive search functionality.}
-\label{tab:ui-components}
-\end{table}
-
-\subsection{Callback Architecture}
-
-Dash callbacks implement the reactive data flow between UI components and the retrieval engine. User interactions trigger callbacks that invoke the retriever, process results, and update the display. The architecture maintains clear separation between presentation logic and retrieval logic.
-
-\section{Data Management Design}
-
-\subsection{CSV-First Architecture}
-
-The CSV corpus serves as the single source of truth with several advantages:
-
+\textbf{Semantic Signal (80\% weight):}
 \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
-  \item \textbf{Simplicity}: Standard format readable by any tool
-  \item \textbf{Version Control}: Git-trackable with meaningful diffs
-  \item \textbf{Audit Trail}: Complete history of all changes
-  \item \textbf{Portability}: No database migration required
-  \item \textbf{Embedding Storage}: JSON strings preserve full precision
+  \item Pre-computed 1024-dimensional UAE-Large-V1 embeddings
+  \item Cosine similarity through normalized dot product
+  \item Captures conceptual similarity beyond keywords
 \end{itemize}
 
-\subsection{SQLite Integration}
-
-SQLite provides lightweight data management for filtering and metadata:
-
+\textbf{BM25 Signal (10\% weight):}
 \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
-  \item \textbf{Filtering}: Efficient WHERE clauses for faceted search
-  \item \textbf{Caching}: Store pre-computed filter combinations
-  \item \textbf{Transactions}: ACID compliance for concurrent reads
-  \item \textbf{Memory Mode}: Optional in-memory database for speed
+  \item Probabilistic retrieval over curated keywords field
+  \item Handles exact terminology matches
+  \item Built using rank-bm25 library with default parameters
 \end{itemize}
 
-Note that SQLite is used only for filtering and metadata management. The actual search indices (BM25, fuzzy, semantic) are built and maintained entirely in memory at startup.
-
-\section{Performance Optimization}
-
-\subsection{Memory Management}
-
-The system carefully manages memory through several strategies:
-
+\textbf{Fuzzy Signal (10\% weight):}
 \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
-  \item \textbf{Shared Arrays}: NumPy arrays shared across components without copying
-  \item \textbf{Float32 Precision}: Embeddings stored as float32 instead of float64
-  \item \textbf{Lazy Loading}: Parse embeddings only when first accessed
-  \item \textbf{Result Limiting}: Cap candidate pools to prevent memory spikes
-  \item \textbf{Garbage Collection}: Explicit cleanup after batch operations
+  \item Partial ratio matching on rule names
+  \item No pre-built index (computed at query time)
+  \item Catches misspellings and partial matches
 \end{itemize}
 
-\subsection{Latency Optimization}
+\subsection{Data Management}
 
-Query latency is minimized through:
+The system uses a three-tier data architecture:
 
+\textbf{Persistent Storage:}
 \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
-  \item \textbf{Pre-computed Indices}: All indices built at startup, not query time
-  \item \textbf{Vectorized Operations}: NumPy operations instead of Python loops
-  \item \textbf{Matrix Multiplication}: Batch similarity computation
-  \item \textbf{Partial Sorting}: Only sort top-k results, not entire list
-  \item \textbf{Component Memoization}: Cache UI components that don't change
+  \item CSV file (32.21MB) containing all rule data
+  \item Embeddings stored as JSON strings for portability
+  \item Version controlled in Git for audit trail
 \end{itemize}
 
-\section{Design Trade-offs}
-
-\subsection{Monolithic vs. Microservices}
-
-We chose monolithic architecture despite microservices being the modern standard:
-
-\textbf{Advantages of our monolithic approach:}
+\textbf{Runtime Caches:}
 \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
-  \item Single deployment unit simplifies operations
-  \item No network overhead between components  
-  \item Shared memory reduces duplication
-  \item Easier debugging and profiling
-  \item Guaranteed consistency without distributed transactions
+  \item SQLite database for filtering operations
+  \item NumPy array (1157×1024) for embedding matrix
+  \item BM25 inverted index in memory
 \end{itemize}
 
-\textbf{Accepted limitations:}
+\textbf{Memory Profile:}
 \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
-  \item Vertical scaling only (sufficient for our corpus size)
-  \item Full restart required for updates
-  \item Single point of failure (mitigated by process supervision)
-  \item Language lock-in to Python
+  \item Embeddings: 4.7MB (float32 precision)
+  \item BM25 index: 45MB
+  \item Rule metadata: 15MB
+  \item Total: 530MB including Dash framework
 \end{itemize}
 
-\subsection{CSV vs. Database Storage}
+\subsection{User Interface}
 
-Storing embeddings in CSV as JSON strings is unconventional but practical:
+The Dash-based interface provides two primary interaction modes:
 
-\textbf{Benefits:}
+\textbf{Search Interface:}
 \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
-  \item Single file contains entire corpus
-  \item Human-readable for debugging
-  \item Version control tracks all changes
-  \item No database administration overhead
+  \item Natural language query input
+  \item Faceted filtering (Rule Type, Country, Business Type, Party Agent)
+  \item Mode selection (Hybrid vs Keyword-only)
+  \item Ranked results with similarity scores
+  \item Detailed rule view with code display
 \end{itemize}
 
-\textbf{Trade-offs:}
+\textbf{Chat Interface:}
 \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
-  \item Larger file size than binary formats
-  \item Parsing overhead at startup
-  \item No incremental updates
+  \item Conversational rule exploration
+  \item Drag-and-drop rule context
+  \item Template-based explanation generation
+  \item Session state management
 \end{itemize}
 
-\subsection{In-Memory Indices vs. Persistent Indices}
+\section{Performance Optimizations}
 
-Building indices at startup ensures consistency:
+\subsection{Startup Optimizations}
 
-\textbf{Advantages:}
 \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
-  \item Always synchronized with current data
-  \item No index corruption issues
-  \item Simplified deployment (no index files)
-  \item Predictable memory usage
+  \item Parallel index construction using ThreadPoolExecutor
+  \item Lazy parsing of JSON embeddings
+  \item Pre-allocated NumPy arrays
+  \item SQLite WAL mode for concurrent access
 \end{itemize}
 
-\textbf{Cost:}
+\subsection{Query-Time Optimizations}
+
 \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
-  \item Startup latency (acceptable for our use case)
-  \item Memory usage for index structures
+  \item Vectorized cosine similarity computation
+  \item Partial sorting with np.argpartition for top-k
+  \item Early termination when minimum score not met
+  \item Shared memory access without copying
 \end{itemize}
 
 \section{Security and Compliance}
 
 \subsection{Security Measures}
 
-The monolithic design simplifies security:
-
 \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
-  \item \textbf{Input Validation}: Query sanitization prevents injection
-  \item \textbf{Read-Only Operations}: No data modification endpoints
-  \item \textbf{Process Isolation}: Runs as non-privileged user
-  \item \textbf{No External Calls}: Eliminates API key management
-  \item \textbf{Audit Logging}: All queries logged with timestamps
+  \item Input sanitization prevents injection attacks
+  \item Read-only operations on all data
+  \item No external API calls or network dependencies
+  \item File-based storage with OS-level permissions
 \end{itemize}
 
-\subsection{Compliance Features}
-
-Banking requirements are addressed through:
+\subsection{Audit Compliance}
 
 \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
-  \item \textbf{Reproducibility}: Deterministic scoring algorithms
-  \item \textbf{Explainability}: Score breakdowns stored and displayed
-  \item \textbf{Data Lineage}: CSV versioning tracks all changes
-  \item \textbf{Access Control}: Integration with enterprise SSO
-  \item \textbf{Data Residency}: All processing happens on-premises
+  \item Deterministic scoring ensures reproducible results
+  \item Complete query logging with timestamps
+  \item Version-controlled corpus in Git
+  \item Transparent score computation with component breakdowns
+\end{itemize}
+
+\section{Design Trade-offs}
+
+\subsection{Choices Made}
+
+\begin{table}[!ht]
+\centering
+\begin{tabular}{p{3.5cm}p{7.5cm}}
+\toprule
+\textbf{Design Choice} & \textbf{Rationale} \\
+\midrule
+Monolithic architecture & Eliminates network overhead, simplifies deployment \\
+CSV storage & Enables version control and manual inspection \\
+JSON embeddings & Maintains portability while allowing single-file deployment \\
+In-memory indices & Avoids synchronization complexity, ensures fast access \\
+Brute-force search & More reliable than approximate methods at our scale \\
+Fixed weights & Simplifies system while maintaining good performance \\
+\bottomrule
+\end{tabular}
+\caption{Key design decisions and their justifications.}
+\label{tab:design-choices}
+\end{table}
+
+\subsection{Rejected Alternatives}
+
+We explicitly rejected several common approaches:
+
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+  \item \textbf{Microservices}: Unnecessary complexity for our scale
+  \item \textbf{FAISS}: Complexity not justified for ~1000 rules; brute-force is faster at this scale
+  \item \textbf{External vector database}: Introduces dependencies and latency
+  \item \textbf{Query-time LLM}: Non-deterministic and slow
+  \item \textbf{Binary embedding format}: Loses version control benefits
+\end{itemize}
+
+\section{Scalability Considerations}
+
+\subsection{Current Limits}
+
+The design accommodates:
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+  \item Up to 10,000 rules before performance degradation
+  \item 10-20 concurrent users per instance
+  \item Daily corpus updates via restart
+  \item 2GB maximum memory footprint
+\end{itemize}
+
+\subsection{Scaling Strategies}
+
+When limits are reached:
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+  \item Horizontal scaling: Multiple instances behind load balancer
+  \item Sharding: Split corpus by business domain
+  \item Caching: Add Redis for frequent queries
+  \item Approximate search: Implement LSH for larger corpora
 \end{itemize}
 
 \section{Summary}
 
-The system design prioritizes simplicity, reliability, and compliance over architectural elegance. The monolithic Dash application with CSV storage and SQLite caching may seem anachronistic compared to modern microservices with vector databases, but it precisely fits our operational constraints. By building indices at startup, normalizing scores per query, and carefully tuning the hybrid weights, we achieve competitive retrieval performance with excellent latency characteristics.
+The system design prioritizes simplicity and reliability over architectural complexity. By implementing hybrid retrieval within a monolithic Python application, we achieve production-ready performance (58ms median latency) while maintaining the auditability and determinism required for banking deployment.
 
-The key insight is that sophisticated NLP capabilities---semantic search, hybrid scoring, faceted filtering---can be delivered through conventional architectures when thoughtfully designed. Our system proves that banking-compliant information retrieval does not require complex infrastructure; it requires careful engineering within constraints.
+Key design principles:
+\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
+  \item Offline complexity, online simplicity
+  \item Memory-resident indices for predictable performance
+  \item Standard libraries over specialized tools
+  \item Transparent scoring for regulatory compliance
+\end{itemize}
+
+This architecture proves that sophisticated information retrieval capabilities can be delivered through thoughtful engineering within real-world constraints, without requiring distributed systems or specialized infrastructure.
