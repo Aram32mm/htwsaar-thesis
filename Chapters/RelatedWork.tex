@@ -1,244 +1,171 @@
-\chapter{Related Work}
-\label{ch:related-work}
+\chapter{Related Work}\label{ch:related-work}
 
-This chapter positions our Kotlin code validation rule retrieval system within the broader landscape of information retrieval, hybrid search architectures, and domain-specific applications in financial services. We examine foundational work in lexical and semantic retrieval, trace the evolution of hybrid approaches, review existing solutions for regulatory compliance and rule management, and identify critical gaps that motivate our contributions. Our analysis reveals that while individual components of our system build on established techniques, their integration within banking constraints and application to code validation rules represents a novel contribution.
+This chapter positions our validation rule retrieval system within the broader landscape of information retrieval and financial compliance systems. We examine foundational work in lexical and semantic retrieval, trace the evolution of hybrid approaches, and identify critical gaps that motivate our contributions.
 
-\section{Foundations of Information Retrieval}
+\section{Information Retrieval Foundations}
 
-\subsection{Lexical Retrieval and BM25}
+\subsection{Lexical Retrieval}
 
-The probabilistic ranking framework underlying BM25 emerged from Robertson and Spärck Jones's work on relevance weighting \cite{robertson1976relevance}. The Okapi system at City University London refined these ideas into the BM25 formula we use today \cite{robertson1994okapi}, which has proven remarkably resilient despite decades of advancement in IR. Robertson et al. \cite{bm25-robertson2009} provide a theoretical foundation showing BM25 emerges naturally from probabilistic assumptions about term occurrence.
+BM25 remains the dominant lexical retrieval method since its emergence from Robertson and Spärck Jones's probabilistic ranking framework \cite{robertson1976relevance,robertson1994okapi}. While Robertson et al. \cite{robertson2009bm25} provided theoretical justification, practical improvements remain elusive. Trotman et al. \cite{trotman2014improvements} found default parameters rarely optimal, motivating our empirical tuning to $k_1=1.5, b=0.3$ for keyword fields.
 
-Recent work has attempted to improve upon BM25. Trotman et al. \cite{trotman2014improvements} explored parameter optimization across different corpora, finding that default parameters ($k_1=1.2, b=0.75$) are rarely optimal—a finding that motivated our empirical tuning to $k_1=1.5, b=0.3$ for keyword fields. Kamphuis et al. \cite{kamphuis2020bm25} introduced BM25L, addressing the length normalization bias for long documents, though this proves less relevant for our short keyword lists.
+Our application of BM25 to curated keyword fields rather than full text aligns with Kim et al. \cite{kim2019structured}, who demonstrated superior performance on high-quality metadata. Unlike their focus on academic abstracts, we apply this principle to expert-curated regulatory keywords.
 
-\paragraph{Application to Structured Fields.} Our use of BM25 on curated keyword fields rather than full text aligns with work by Kim et al. \cite{kim2019structured}, who demonstrated that BM25 on high-quality metadata fields often outperforms full-text search. However, their work focused on academic papers with abstracts, while we apply similar principles to regulatory rules with expert-curated keywords.
+\subsection{Dense Retrieval}
 
-\subsection{Dense Retrieval and Semantic Embeddings}
+Karpukhin et al.'s Dense Passage Retrieval \cite{karpukhin2020dense} established neural embeddings as viable alternatives to lexical methods. Reimers and Gurevych \cite{reimers2019sbert} made this practical through Sentence-BERT, enabling pre-computed embeddings with cosine similarity—the approach we adopt with UAE-Large-V1 \cite{uae2023large}.
 
-The paradigm shift toward dense retrieval began with Karpukhin et al.'s Dense Passage Retrieval (DPR) \cite{karpukhin2020dense}, which showed BERT-based embeddings could outperform BM25 on open-domain QA. This sparked a revolution in neural IR, with subsequent work improving both effectiveness and efficiency.
-
-\paragraph{Sentence Transformers.} Reimers and Gurevych \cite{reimers2019sentence} introduced Sentence-BERT, enabling efficient semantic similarity via cosine distance—the approach we adopt. Their key insight was that cross-encoders, while accurate, are too slow for retrieval; siamese networks produce independent embeddings enabling pre-computation. The UAE-Large-V1 model we employ \cite{uae2023large} extends this architecture with larger capacity and multilingual training, crucial for our EN/DE descriptions.
-
-\paragraph{Retrieval-Specific Training.} Xiong et al. \cite{xiong2021approximate} proposed ANCE (Approximate Nearest Neighbor Negative Contrastive Estimation), using hard negatives to train better retrieval models. While we use pre-trained UAE-Large-V1 without fine-tuning, their work suggests significant improvements are possible with domain-specific training on banking rules.
-
-\paragraph{Efficient Similarity Search.} Johnson et al. \cite{johnson2019billion} introduced FAISS for billion-scale similarity search, becoming the de facto standard for production dense retrieval. Our decision to use \texttt{scikit-learn}'s \texttt{cosine\_similarity} instead—driven by banking constraints—aligns with findings by Douze et al. \cite{douze2024faiss} that brute-force search with BLAS optimization is optimal for corpora under 10,000 documents.
+While Johnson et al. \cite{johnson2019billion} popularized FAISS for large-scale similarity search, Douze et al. \cite{douze2024faiss} confirmed brute-force search remains optimal for corpora under 10,000 documents, validating our simpler approach.
 
 \section{Hybrid Retrieval Systems}
 
-\subsection{Motivation and Early Work}
+\subsection{Combination Strategies}
 
-The limitations of pure lexical or pure semantic retrieval motivated hybrid approaches. Kuzi et al. \cite{kuzi2020leveraging} demonstrated that combining BM25 with word embeddings improved performance across multiple datasets, establishing the principle that lexical and semantic signals provide complementary relevance indicators.
+Early hybrid work by Kuzi et al. \cite{kuzi2020hybrid} demonstrated complementary signals between lexical and semantic methods. Lin and Ma \cite{lin2021pretrained} formalized this, showing simple linear combinations often outperform complex fusion. Their convex combination approach inspired our three-weight system.
 
-Lin and Ma \cite{lin2021pretrained} formalized the hybrid paradigm, showing that simple linear combinations often outperform complex fusion methods. Their finding that convex combinations with three weights sum to 1.0 inspired our approach, though we extend it with semantic gating.
+For score fusion, we chose min-max normalization over alternatives like reciprocal rank fusion \cite{cormack2009rrf} to preserve score magnitudes. Wang et al. \cite{wang2023improving} validated this approach for heterogeneous signals. While learning-to-rank methods exist \cite{liu2009learning,burges2005learning}, Qin et al. \cite{qin2021neural} found simple combinations competitive with limited training data—relevant given our 30 queries.
 
-\subsection{Fusion Strategies}
+\subsection{Recent Neural Approaches}
 
-\paragraph{Score Combination Methods.} Cormack et al. \cite{cormack2009reciprocal} introduced reciprocal rank fusion (RRF), combining rankings without score calibration. While elegant, RRF discards score magnitude information. Our min-max normalization preserves relative score differences while ensuring comparability—an approach validated by Wang et al. \cite{wang2023improving} for heterogeneous signals.
+ColBERT \cite{khattab2020colbert} and its successors represent sophisticated late-interaction models incompatible with our constraints. Generative retrieval approaches like DSI \cite{tay2022transformer} remain experimental and lack the interpretability required in banking.
 
-\paragraph{Learning to Rank.} Liu \cite{liu2009learning} surveyed learning-to-rank methods that could combine our base signals. RankNet \cite{burges2005learning}, LambdaRank \cite{burges2006learning}, and LambdaMART \cite{wu2010adapting} represent increasingly sophisticated approaches. However, Qin et al. \cite{qin2021neural} found that simple linear combinations often match complex models when training data is limited—validating our choice given only 30 labeled queries.
-
-\subsection{Recent Advances}
-
-\paragraph{ColBERT and Late Interaction.} Khattab and Zaharia \cite{khattab2020colbert} proposed ColBERT, using late interaction between query and document tokens for more expressive matching. While powerful, ColBERT requires specialized indices incompatible with our CSV-first architecture. Santhanam et al. \cite{santhanam2022colbertv2} improved efficiency, but deployment complexity remains high.
-
-\paragraph{Generative Retrieval.} Recent work explores using language models directly for retrieval. The GENRE model \cite{de2021autoregressive} generates document identifiers, while DSI \cite{tay2022transformer} memorizes corpus in model parameters. These approaches remain experimental and incompatible with banking requirements for interpretability.
-
-\section{Domain-Specific Applications in Finance}
+\section{Financial Domain Applications}
 
 \subsection{Regulatory Compliance Systems}
 
-Financial institutions have long grappled with regulatory complexity. Arner et al. \cite{arner2017fintech} coined "RegTech" for technology addressing regulatory challenges, identifying information retrieval as a core capability. Their taxonomy positions our system within "Regulatory Intelligence"—tools helping humans understand and apply rules.
-
-\paragraph{Rule Extraction and Management.} Kost et al. \cite{kost2020extracting} developed systems for extracting rules from regulatory documents using NLP. While they focus on unstructured PDF parsing, we assume pre-extracted rules in structured format. Their finding that expert-curated metadata dramatically improves retrieval accuracy motivated our investment in keyword curation.
-
-Hassan et al. \cite{hassan2022regulatory} surveyed regulatory compliance systems, identifying common patterns:
+Arner et al. \cite{arner2017fintech} positioned "RegTech" as technology addressing regulatory challenges, identifying information retrieval as core. Hassan et al. \cite{hassan2022compliance} surveyed compliance systems, finding common limitations:
 \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
- \item Heavy reliance on keyword search despite its limitations
- \item Fragmentation across departments and systems
- \item Lack of semantic understanding in retrieval
- \item Audit trail requirements constraining architecture
-\end{itemize}
-Our system addresses each of these challenges through hybrid retrieval, corpus consolidation, semantic embeddings, and CSV-based audit trails.
-
-\subsection{Code Search and Validation Rules}
-
-\paragraph{Source Code Retrieval.} While our system retrieves rules rather than analyzing code, work on code search provides relevant insights. Husain et al. \cite{husain2019codesearchnet} created CodeSearchNet, demonstrating that code retrieval requires specialized approaches. Their finding that natural language queries poorly match code syntax parallels our challenge with rule descriptions.
-
-Gu et al. \cite{gu2018deep} proposed DeepCS for code search using deep learning, combining code semantics with API sequences. While we don't analyze Kotlin ASTs, their multi-signal approach (method names, APIs, comments) inspired our combination of rule names, keywords, and descriptions.
-
-\paragraph{Validation and Business Rules.} Hay et al. \cite{hay2006defining} formalized business rule patterns, creating a taxonomy we implicitly follow. Their distinction between:
-\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
- \item \textbf{Constraint rules}: Validate data against conditions (our primary focus)
- \item \textbf{Derivation rules}: Compute values from inputs
- \item \textbf{Action rules}: Trigger processes based on events
-\end{itemize}
-helps explain why our retrieval approach works—constraint rules have consistent structure amenable to embedding.
-
-\subsection{Previous Systems in Banking}
-
-\paragraph{Commercial Solutions.} Major vendors offer regulatory compliance platforms:
-\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
- \item \textbf{IBM OpenPages} \cite{ibm2022openpages}: Enterprise GRC with document management
- \item \textbf{Thomson Reuters Regulatory Intelligence} \cite{thomson2022regulatory}: Curated regulatory updates
- \item \textbf{Palantir Foundry} \cite{palantir2022foundry}: Data integration for compliance
+ \item Reliance on keyword search despite poor recall
+ \item Fragmentation across departments  
+ \item Lack of semantic understanding
+ \item Audit requirements constraining architecture
 \end{itemize}
 
-These systems excel at data management but offer limited semantic search capabilities. None provide the lightweight, monolithic architecture suitable for embedded deployment within development workflows.
+Our system addresses each through hybrid retrieval, corpus consolidation, semantic embeddings, and CSV-based audit trails.
 
-\paragraph{Academic Prototypes.} Zhang et al. \cite{zhang2020regulatory} developed a BERT-based system for matching transactions to regulations, achieving 87\% accuracy on labeled data. However, their approach requires extensive training data and GPU infrastructure—both unavailable in our context.
+\subsection{Code and Rule Retrieval}
 
-Zhong et al. \cite{zhong2021does} fine-tuned language models on financial regulations, showing domain-specific training improves performance. While promising, their work focuses on document-level retrieval rather than rule-level granularity.
+While focused on rules rather than code analysis, insights from code search prove relevant. Husain et al. \cite{husain2019codesearch} showed natural language poorly matches code syntax—paralleling our challenge with rule descriptions. Gu et al. \cite{gu2018deepcode} combined multiple signals (method names, APIs, comments), inspiring our multi-signal approach.
 
-\section{Technical Foundations}
+Hay et al. \cite{hay2006defining} formalized business rule categories. Their taxonomy explains why retrieval works well for constraint rules (our focus): consistent structure amenable to embedding, unlike derivation or action rules.
 
-\subsection{Fuzzy String Matching}
+\subsection{Existing Banking Solutions}
 
-Our use of fuzzy matching for rule names builds on established edit distance algorithms. Navarro \cite{navarro2001guided} surveyed approximate string matching techniques, identifying token-based methods as superior for multi-word strings. The token-set ratio we employ, implemented in FuzzyWuzzy \cite{fuzzywuzzy2011}, combines ideas from:
-\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
- \item Levenshtein distance \cite{levenshtein1966} for character-level similarity
- \item Jaccard similarity for set-based comparison
- \item TF-IDF weighting for token importance (though we use uniform weights)
-\end{itemize}
+Commercial platforms (IBM OpenPages \cite{ibm2022openpages}, Thomson Reuters \cite{thomson2022regulatory}) excel at data management but lack semantic search and lightweight deployment. Academic prototypes \cite{zhang2020regulatory,zhong2021does} demonstrate neural approaches but require extensive training data and GPU infrastructure unavailable in our context.
 
-Cohen et al. \cite{cohen2003comparison} compared string similarity metrics on name-matching tasks, finding token-based methods robust to reordering—critical for rule names like "EUR Transfer Limit" vs "Limit Transfer EUR".
+\section{Technical Components}
 
-\subsection{Evaluation Methodologies}
+\subsection{String Matching}
 
-\paragraph{Leave-One-Out Cross-Validation.} Our use of LOOCV for weight tuning follows best practices for small datasets. Kohavi \cite{kohavi1995study} demonstrated LOOCV provides nearly unbiased estimates with high variance—acceptable given our limited queries. Wong \cite{wong2015performance} confirmed LOOCV's superiority over k-fold when $n < 50$, directly supporting our methodology.
+Our fuzzy matching builds on established edit distance work \cite{navarro2001guided,levenshtein1966}. The token-set ratio we employ \cite{fuzzywuzzy2011} proves robust to reordering—critical for rule names like "EUR Transfer Limit" vs "Limit Transfer EUR" \cite{cohen2003comparison}.
 
-\paragraph{Information Retrieval Metrics.} Our metric selection—MRR@5, Hit@k, Coverage—follows standards established by Voorhees \cite{voorhees1999trec} at TREC. The choice of MRR@5 over MAP reflects our focus on known-item search where users seek specific rules. Chapelle et al. \cite{chapelle2009expected} showed MRR correlates strongly with user satisfaction in navigational queries.
+\subsection{Evaluation Methods}
 
-\subsection{Monolithic vs Microservices Architecture}
+Our LOOCV approach follows Kohavi \cite{kohavi1995cv} and Wong \cite{wong2015loocv}, who demonstrated its superiority for small datasets ($n < 50$). Metric selection (MRR@5, Hit@k) follows TREC standards \cite{voorhees1999trec}, with MRR appropriate for known-item search \cite{chapelle2009err}.
 
-Our monolithic design contradicts prevailing microservices wisdom. Newman \cite{newman2015building} popularized microservices for scalability and independent deployment. However, recent work questions this orthodoxy:
+\subsection{Architecture Choices}
 
-\paragraph{The Monolith Renaissance.} Bogner et al. \cite{bogner2019microservices} found many organizations returning to monoliths after microservices complexity. Their survey identified scenarios favoring monoliths:
-\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
- \item Small teams (under 10 developers)
- \item Moderate scale (thousands, not millions of requests)
- \item Strict latency requirements
- \item Heavy inter-component communication
-\end{itemize}
-All four conditions apply to our system.
+Our monolithic design contradicts microservices orthodoxy \cite{newman2015microservices} but aligns with recent findings. Bogner et al. \cite{bogner2019microservices} identified scenarios favoring monoliths: small teams, moderate scale, strict latency requirements, and heavy inter-component communication—all applicable here. Villamizar et al. \cite{villamizar2015evaluating} found monoliths use 30\% less CPU with 50\% lower latency, validating our choice.
 
-Villamizar et al. \cite{villamizar2015evaluating} compared monolithic and microservices architectures empirically, finding monoliths use 30\% less CPU and have 50\% lower latency for comparable workloads—validating our architectural choice.
+\section{Critical Gaps and Our Contributions}
 
-\section{Gaps in Existing Literature}
+\subsection{Production Deployment Gaps}
 
-Despite extensive prior work, several gaps motivated our contributions:
+While hybrid retrieval is well-studied, few papers detail production deployment under real constraints. Academic work assumes GPU availability, containerization, and external services—absent in banking. We demonstrate hybrid retrieval within these constraints.
 
-\subsection{Integration Gaps}
+Our CSV-first architecture storing embeddings as JSON strings appears nowhere in literature, yet solves real requirements: version control compatibility, audit trails, single-file deployment, and universal tool support.
 
-\paragraph{Hybrid Retrieval in Production.} While hybrid approaches are well-studied academically, few papers detail production deployments with real constraints. Works like Ma et al. \cite{ma2023fine} assume GPU availability and Docker orchestration—luxuries absent in regulated banking environments. Our contribution demonstrates hybrid retrieval within strict operational constraints.
+\subsection{Domain-Specific Gaps}
 
-\paragraph{CSV-First Architecture.} No prior work explores storing embeddings as JSON strings in CSV files. While seemingly naive, this approach solves real problems:
-\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
- \item Version control compatibility
- \item Audit trail requirements
- \item Single-file deployment
- \item Universal tool support
-\end{itemize}
+No prior work addresses validation rule retrieval specifically. While code search is established, validation rules occupy a unique niche: more structured than general code, more complex than configuration, requiring both lexical and semantic understanding, and subject to regulatory audit.
 
-The literature focuses on optimal storage (FAISS, Pinecone, Weaviate) while ignoring scenarios where such systems are prohibited.
+Banking infrastructure constraints—no external APIs, no unapproved libraries, complete audit trails, deterministic behavior—are rarely acknowledged in academic literature, making most research irrelevant for our context.
 
-\subsection{Domain Gaps}
+\subsection{Methodological Contributions}
 
-\paragraph{Kotlin Validation Rules.} No prior work addresses retrieval of Kotlin validation rules specifically. While code search is well-studied, validation rules occupy a unique niche:
-\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
- \item More structured than general code
- \item More complex than configuration
- \item Requiring both lexical and semantic understanding
- \item Subject to regulatory audit requirements
-\end{itemize}
+Most IR research assumes thousands of queries; our 30-query evaluation would be dismissed as insufficient. Yet this reflects specialized domains where expert annotations are expensive. We contribute rigorous evaluation methodology for data-scarce scenarios.
 
-\paragraph{Banking Infrastructure Constraints.} Academic literature rarely acknowledges the severe constraints in banking IT:
-\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
- \item No external API calls (security)
- \item No unapproved libraries (compliance)
- \item Complete audit trails (regulatory)
- \item Deterministic behavior (testing)
-\end{itemize}
-
-Papers assuming cloud deployment, containerization, or GPU availability—standard in academic settings—prove irrelevant for banking production.
-
-\subsection{Methodological Gaps}
-
-\paragraph{Small-Scale Evaluation.} Most IR research assumes thousands of queries for evaluation. Our 30-query dataset would be dismissed as insufficient in academic venues. Yet this reflects reality for specialized domains where expert annotations are expensive. We contribute rigorous evaluation methodology for data-scarce scenarios.
-
-\paragraph{Sensitivity Analysis.} IR papers typically report optimal parameters without exploring stability. Our sensitivity analysis, varying weights by ±0.2, reveals broad performance plateaus—crucial information for production systems. This robustness analysis should be standard but remains rare.
-
-\section{Positioning Our Contributions}
-
-\subsection{Technical Innovations}
-
-While individual components are established, their integration yields novel contributions:
-
-\begin{enumerate}[leftmargin=*,itemsep=2pt,topsep=2pt]
- \item \textbf{Three-signal hybrid with semantic gating}: Extends linear combination with threshold filtering
- \item \textbf{CSV embeddings as JSON strings}: Solves deployment constraints elegantly
- \item \textbf{Monolithic Dash architecture}: Proves simplicity viable for production NLP
- \item \textbf{LOOCV weight optimization}: Rigorous tuning despite data scarcity
- \item \textbf{Comprehensive ablation and sensitivity}: Ensures production robustness
-\end{enumerate}
-
-\subsection{Practical Impact}
-
-Our system fills a real need unaddressed by existing solutions:
-
-\paragraph{vs Commercial Platforms:}
-\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
- \item Lighter weight (200MB vs multi-GB)
- \item Faster deployment (single Python process vs distributed system)
- \item Lower cost (open source vs enterprise licensing)
- \item Better semantic search (embeddings vs keywords only)
-\end{itemize}
-
-\paragraph{vs Academic Prototypes:}
-\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
- \item Production-ready (handles errors, logging, monitoring)
- \item Constraint-compliant (no external dependencies)
- \item Empirically tuned (not just default parameters)
- \item Documented deployment (not just algorithm description)
-\end{itemize}
-
-\subsection{Theoretical Implications}
-
-Our work challenges several assumptions in IR literature:
-
-\begin{enumerate}[leftmargin=*,itemsep=2pt,topsep=2pt]
- \item \textbf{Complexity necessity}: Simple architectures can deliver sophisticated capabilities
- \item \textbf{Scale requirements}: Thousands of documents justify specialized IR systems
- \item \textbf{Storage optimization}: "Inefficient" formats (CSV) can be practically superior
- \item \textbf{Microservices superiority}: Monoliths excel for specific use cases
- \item \textbf{GPU dependence}: CPU-only systems remain viable for moderate scale
-\end{enumerate}
-
-\section{Future Research Directions}
-
-Our work opens several research avenues:
-
-\subsection{Methodological Extensions}
-
-\paragraph{Few-Shot Evaluation Frameworks.} Developing statistical methods for reliable IR evaluation with under 50 queries would benefit specialized domains. Bayesian approaches or bootstrap methods could provide confidence intervals despite data scarcity.
-
-\paragraph{Constraint-Aware Architecture Search.} Automated methods for finding optimal architectures given operational constraints (no GPU, no external APIs, single-file deployment) would help practitioners navigate trade-offs.
-
-\subsection{Technical Enhancements}
-
-\paragraph{Embedding Compression.} Investigating techniques to compress 1024-dimensional embeddings for CSV storage while preserving retrieval quality. Product quantization or learned compression could reduce storage 4-8x.
-
-\paragraph{Incremental Index Updates.} Developing algorithms for updating BM25 and embedding indices without full reconstruction would improve system availability during corpus updates.
-
-\subsection{Domain Applications}
-
-\paragraph{Cross-Lingual Retrieval.} Extending our EN/DE capability to full multilingual search across EU banking regulations would require careful attention to embedding alignment and query translation.
-
-\paragraph{Temporal Reasoning.} Incorporating rule versioning and temporal queries ("rules changed since 2023") would require extending our retrieval model with time-aware components.
+Our sensitivity analysis, varying weights by ±0.2 to reveal performance plateaus, provides crucial robustness information rarely reported but essential for production systems.
 
 \section{Summary}
 
-This review positioned our Kotlin validation rule retrieval system within the broader IR landscape, demonstrating both its foundations in established techniques and its novel contributions addressing unmet needs. We build upon decades of IR research—from BM25 to dense retrieval to hybrid fusion—while innovating within severe operational constraints unique to banking environments.
+This review demonstrates our system's foundations in established techniques while highlighting novel contributions addressing unmet needs. We build upon decades of IR research while innovating within severe operational constraints unique to banking environments.
 
-The gaps we identified—production hybrid retrieval under constraints, CSV-first architectures, small-scale evaluation methodologies, and banking-specific requirements—motivated our pragmatic approach. By solving these real problems with simple, auditable solutions, we demonstrate that practical IR systems need not sacrifice sophistication for deployability.
+Our work challenges assumptions about complexity necessity, scale requirements, and architectural choices. By solving real problems with simple, auditable solutions, we demonstrate that practical IR systems need not sacrifice sophistication for deployability. As the field advances toward complex neural architectures and distributed systems, we provide evidence that simple solutions remain viable—even optimal—when they work within the constraints that matter.
 
-Our work contributes to a growing recognition that monolithic architectures, simple storage formats, and CPU-only processing remain viable—even optimal—for many production scenarios. As the field advances toward ever-more complex neural architectures and distributed systems, we provide a counterpoint: sometimes, the best solution is the simplest one that actually works within the constraints that matter.
+\section{Comparative Analysis}
+To crystallize the distinctions between existing approaches and our contributions, we present a systematic comparison across key operational dimensions.
+
+Table~\ref{tab:related-work-comparison} synthesizes how our approach addresses limitations in existing solutions across key dimensions relevant to validation rule retrieval in banking environments.
+
+\begin{table}[!htbp]
+\centering
+\small
+\begin{tabular}{p{3cm}p{4cm}p{4cm}p{3.5cm}}
+\toprule
+\textbf{Dimension} & \textbf{Academic Solutions} & \textbf{Commercial Platforms} & \textbf{Our Approach} \\
+\midrule
+\textbf{Retrieval Method} & 
+Pure neural (DPR, ColBERT) or pure lexical (BM25) & 
+Keyword search with filters & 
+Hybrid: BM25 + Fuzzy + Semantic with learned weights \\
+\addlinespace
+
+\textbf{Deployment Model} & 
+Microservices, Docker, Kubernetes & 
+Enterprise servers, distributed systems & 
+Monolithic single-process Dash application \\
+\addlinespace
+
+\textbf{Storage Backend} & 
+FAISS, Pinecone, Weaviate, PostgreSQL + pgvector & 
+Oracle, SQL Server, proprietary databases & 
+CSV with JSON embeddings + SQLite cache \\
+\addlinespace
+
+\textbf{Infrastructure Requirements} & 
+GPUs, external APIs, cloud services & 
+Dedicated servers, enterprise licenses & 
+Single Python process, no external dependencies \\
+\addlinespace
+
+\textbf{Training Data Needs} & 
+Thousands of labeled examples for fine-tuning & 
+Not applicable (no learning) & 
+30 queries sufficient via LOOCV \\
+\addlinespace
+
+\textbf{Semantic Understanding} & 
+Advanced (fine-tuned models) but requires training & 
+None or limited (taxonomy-based) & 
+Pre-trained embeddings without fine-tuning \\
+\addlinespace
+
+\textbf{Audit Trail} & 
+Often ignored or requires additional logging layer & 
+Built-in but complex, database-centric & 
+Native via CSV version control \\
+\addlinespace
+
+\textbf{Update Mechanism} & 
+Retrain models, rebuild indices & 
+Database transactions, ETL pipelines & 
+Replace CSV, restart application \\
+\addlinespace
+
+\textbf{Latency} & 
+Variable (10ms-10s depending on model) & 
+Fast (<100ms) but keyword-only & 
+Consistent (<1000ms P95) with semantic search \\
+\addlinespace
+
+\textbf{Evaluation Method} & 
+Standard IR metrics on large test sets & 
+User acceptance testing & 
+LOOCV with sensitivity analysis \\
+\bottomrule
+\end{tabular}
+\caption{Comparison of approaches across operational dimensions critical for banking deployment.}\label{tab:related-work-comparison}
+\end{table}
+
+This comparison reveals our system's unique position: combining the semantic capabilities of academic research with the operational simplicity required for banking deployment, while avoiding the complexity of commercial platforms. The key insight is that sophisticated retrieval need not require complex infrastructure when the corpus is moderate in size and the constraints are well-defined.
+
