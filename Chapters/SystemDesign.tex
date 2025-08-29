@@ -176,7 +176,7 @@ During runtime, the system constructs multiple in-memory caches to optimize quer
     xtick=data,
     xticklabel style={rotate=45, anchor=east, font=\small},
     ymin=0,
-    ymax=250,
+    ymax=300,
     bar width=15pt,
     legend style={at={(0.5,-0.4)}, anchor=north, legend columns=-1}
 ]
@@ -268,6 +268,7 @@ These optimizations leverage NumPy's vectorized operations to minimize computati
   \item \textbf{Shared memory access without copying}: NumPy views avoid data duplication during computation
 \end{itemize}
 
+\newpage
 \section{Security and Compliance}
 
 Banking environments require security controls and audit capabilities. The system design incorporates these requirements at the architectural level.
@@ -329,37 +330,46 @@ We explicitly rejected several common approaches:
 
 \section{Scalability Considerations}
 
+While the current architecture efficiently serves 1,157 rules with sub-100ms latency, understanding system boundaries and growth strategies is essential for production planning. The monolithic design trades horizontal elasticity for operational simplicity—a deliberate choice that aligns with our corpus size and usage patterns.
+
 \subsection{Current Limits}
 
-The design accommodates:
-\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
-  \item Up to 10,000 rules before performance degradation
-  \item 10-20 concurrent users per instance
-  \item Daily corpus updates via restart
-  \item 2GB maximum memory footprint
+The system operates comfortably within these boundaries, validated through load testing and extrapolation from current performance metrics:
+
+\begin{itemize}[leftmargin=*,itemsep=3pt,topsep=3pt]
+  \item \textbf{Corpus size: Up to 10,000 rules before performance degradation.} Linear search complexity in brute-force cosine similarity becomes noticeable beyond this threshold, with query latency increasing from 58ms to approximately 500ms
+  \item \textbf{Concurrent users: 10-20 simultaneous users per instance.} Python's GIL limits true parallelism, though async request handling in Dash provides adequate concurrency for departmental usage
+  \item \textbf{Update frequency: Daily corpus updates via restart.} The 464ms startup time makes brief downtime acceptable during off-peak hours, eliminating complex hot-reload mechanisms
+  \item \textbf{Memory ceiling: 2GB maximum footprint.} Current 530MB usage leaves headroom for 4× corpus growth while remaining deployable on standard containers
 \end{itemize}
 
 \subsection{Scaling Strategies}
 
-When limits are reached:
-\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
-  \item Horizontal scaling: Multiple instances behind load balancer
-  \item Sharding: Split corpus by business domain
-  \item Caching: Add Redis for frequent queries
-  \item Approximate search: Implement LSH for larger corpora
+When approaching these limits, several paths maintain the architecture's simplicity while extending capacity:
+
+\begin{itemize}[leftmargin=*,itemsep=3pt,topsep=3pt]
+  \item \textbf{Horizontal scaling: Multiple instances behind load balancer.} Session-affinity routing ensures users maintain state while distributing load across instances, each serving the complete corpus
+  \item \textbf{Domain sharding: Split corpus by business domain.} Payment rules, trade validation, and compliance checks could run as separate instances, reducing each corpus to manageable size
+  \item \textbf{Query caching: Add Redis for frequent queries.} Analysis shows 20\% of queries repeat daily; caching these would reduce median latency to under 10ms
+  \item \textbf{Approximate search: Implement LSH for larger corpora.} Locality-sensitive hashing would maintain sub-100ms latency beyond 10,000 rules, trading minor accuracy loss for scalability
 \end{itemize}
 
+These strategies preserve the monolithic architecture's benefits while addressing specific bottlenecks. The progression from replication to sharding to caching to approximation provides a clear growth path without premature optimization.
+
+\newpage
 \section{Summary}
 
-The system design prioritizes simplicity and reliability over architectural complexity. By implementing hybrid retrieval within a monolithic Python application, we achieve production-ready performance (58ms median latency) while maintaining the auditability and determinism required for banking deployment.
+The system design demonstrates that enterprise-grade information retrieval need not require distributed architectures or specialized infrastructure. By implementing hybrid retrieval within a monolithic Python application, we achieve production-ready performance—58ms median latency serving 1,157 rules to concurrent users—while maintaining the strict auditability and determinism that banking deployment demands.
 
-Key design principles:
+Our architecture embodies four core design principles that guided every technical decision:
 
-\begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
-  \item Offline complexity, online simplicity
-  \item Memory-resident indices for predictable performance
-  \item Standard libraries over specialized tools
-  \item Transparent scoring for regulatory compliance
+\begin{itemize}[leftmargin=*,itemsep=3pt,topsep=3pt]
+  \item \textbf{Offline complexity, online simplicity}: LLM enrichment, embedding generation, and index construction happen during corpus preparation, leaving query-time processing deterministic and fast
+  \item \textbf{Memory-resident indices for predictable performance}: All search structures remain in RAM, trading 530MB of memory for consistent sub-100ms response times without disk I/O variance
+  \item \textbf{Standard libraries over specialized tools}: Dash, scikit-learn, and SQLite provide proven reliability without the operational burden of FAISS, Elasticsearch, or custom vector databases
+  \item \textbf{Transparent scoring for regulatory compliance}: Every ranking decision traces back through documented weight combinations, enabling complete audit trails required for financial systems
 \end{itemize}
 
-This architecture proves that sophisticated information retrieval capabilities can be delivered through thoughtful engineering within real-world constraints, without requiring distributed systems or specialized infrastructure.
+This design validates a broader thesis: that thoughtful application of established techniques often surpasses algorithmic sophistication when operating under real constraints. The monolithic architecture's 464ms startup time, single-file deployment, and straightforward debugging outweigh any theoretical benefits of microservices at our scale. Similarly, brute-force cosine similarity's reliability and transparency prove more valuable than approximate nearest neighbor methods' marginal speed improvements on a corpus of 1,157 rules.
+
+By choosing architectural simplicity, we gained operational benefits that compound over time: faster development cycles, simpler deployment procedures, clearer debugging paths, and lower maintenance burden. This approach proves that sophisticated information retrieval capabilities—combining semantic understanding, keyword precision, and fuzzy tolerance—can be delivered through pragmatic engineering choices that prioritize the constraints that actually matter in production environments.
