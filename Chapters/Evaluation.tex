@@ -10,7 +10,7 @@ This chapter evaluates our hybrid retrieval system for validation rules using a 
 
 Our evaluation uses 30 test queries with manually annotated ground truth, where each query has exactly one correct target rule. While this dataset is small for definitive conclusions, it provides initial validation of our approach and methodology for future larger-scale evaluation.
 
-\textbf{Query characteristics:}
+\paragraph{Query characteristics:}
 \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
   \item Natural language queries typical of QA and developer usage
   \item Mix of specific rule names, error descriptions, and conceptual searches
@@ -18,7 +18,7 @@ Our evaluation uses 30 test queries with manually annotated ground truth, where 
   \item Average query length: 4.2 tokens (range: 2–9 tokens)
 \end{itemize}
 
-\textbf{Limitations:} With only 30 queries, our results should be interpreted as preliminary indicators rather than definitive performance measures. Statistical significance testing is not meaningful at this scale, and confidence intervals would be misleadingly wide.
+\paragraph{Limitations.}With only 30 queries, our results should be interpreted as preliminary indicators rather than definitive performance measures. Statistical significance testing is not meaningful at this scale, and confidence intervals would be misleadingly wide.
 
 \subsection{Candidate Pool Construction}
 
@@ -65,7 +65,7 @@ This protocol ensures each query is evaluated with weights trained without seein
 
 \subsection{Individual Signal Performance}
 
-\begin{table}[!ht]
+\begin{table}[H]
 \centering
 \small
 \begin{tabular}{lrrrrr}
@@ -87,7 +87,7 @@ Baseline hybrid* & 0.434 & 0.346 & 0.500 & 0.577 & 0.885 \\
 
 After LOOCV optimization, the hybrid achieves improved performance:
 
-\begin{table}[!ht]
+\begin{table}[H]
 \centering
 \small
 \begin{tabular}{lrrrrr}
@@ -152,7 +152,7 @@ These weights reflect strong reliance on semantic similarity with complementary 
 
 To understand signal contributions, we perform ablation by removing one signal at a time from the optimized weights and renormalizing:
 
-\begin{table}[!ht]
+\begin{table}[H]
 \centering
 \small
 \begin{tabular}{lcrrr}
@@ -209,7 +209,7 @@ We analyze robustness by perturbing each weight by $\Delta \in \{-0.2, -0.1, 0, 
 
 Beyond retrieval quality, we validate system responsiveness on the full corpus of 1,157 rules:
 
-\begin{table}[!ht]
+\begin{table}[H]
 \centering
 \begin{tabular}{lrrl}
 \toprule

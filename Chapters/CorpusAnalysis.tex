@@ -1,13 +1,13 @@
 \chapter{Corpus Analysis}
 \label{ch:corpus-analysis}
 
-This chapter presents a comprehensive analysis of the standardized validation rule corpus used in our retrieval system. Through systematic examination of 1,157 rules consolidated from Deutsche Bank's payment processing platform, we assess field completeness, data quality, and embedding characteristics to understand the corpus's strengths and identify areas for improvement.
+This chapter presents a comprehensive analysis of the standardized validation rule corpus used in our retrieval system. Through systematic examination of 1,157 rules consolidated from Deutsche Bank's payment processing platforms, we assess field completeness, data quality, and embedding characteristics to understand the corpus's strengths and identify areas for improvement.
 
 \section{Data Consolidation and Enhancement}
 
 \subsection{Multi-Source Consolidation}
 
-The corpus was constructed by consolidating three separate CSV files from different validation subsystems, each containing partially overlapping rule sets with inconsistent formats. The consolidation process involved:
+The corpus was constructed by consolidating three separate CSV files containing partially overlapping rule sets with inconsistent formats. The consolidation process involved:
 
 \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
  \item \textbf{Source integration}: Merged 1,743 total rules from three CSV sources
@@ -19,20 +19,22 @@ The corpus was constructed by consolidating three separate CSV files from differ
 
 \subsection{LLM-Based Field Generation}
 
-After consolidation, we enhanced the corpus using Gemini-2.5-Pro in an offline batch process. The model received three core fields from the original data:
+After consolidation, we enhanced the corpus using Gemini-2.5-Pro in an offline batch process. The model received all available fields from the original data, though three were particularly crucial as they had complete coverage:
 
 \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
- \item \texttt{rule\_name}: The human-readable identifier
- \item \texttt{rule\_description}: Basic business description (when available)
- \item \texttt{rule\_code}: The actual Kotlin validation implementation
+ \item \textbf{rule\_name}: The human-readable identifier
+ \item \textbf{rule\_description}: Basic business description
+ \item \textbf{rule\_code}: The actual Kotlin validation implementation
 \end{itemize}
+
+While other fields (error codes, partial descriptions) were also provided to the model when available, these three core fields formed the foundation for generating comprehensive descriptions and extracting metadata.
 
 From these inputs, Gemini-2.5-Pro generated three enhanced fields:
 
 \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
- \item \textbf{\texttt{llm\_description}}: Comprehensive natural language description averaging 89 words, synthesizing the rule's purpose, validation logic, and business context
- \item \textbf{\texttt{keywords}}: Extracted and curated search terms relevant to the rule, averaging 11.6 keywords per rule
- \item \textbf{Categorical tags}: Scraped and structured \texttt{rule\_type}, \texttt{country}, \texttt{business\_type}, and \texttt{party\_agent} values from unstructured text
+ \item \textbf{llm\_description}: Comprehensive natural language description averaging 89 words, synthesizing the rule's purpose, validation logic, and business context
+ \item \textbf{keywords}: Extracted and curated search terms relevant to the rule, averaging 11.6 keywords per rule
+ \item \textbf{tags}: Scraped and structured \texttt{rule\_type}, \texttt{country}, \texttt{business\_type}, and \texttt{party\_agent} values from unstructured text
 \end{itemize}
 
 This offline enhancement process transformed sparse original data into rich, searchable content that forms the foundation of our retrieval system.
@@ -58,7 +60,7 @@ The corpus employs a carefully designed schema balancing completeness with stora
 
 Table~\ref{tab:corpus-composition} shows the distribution of corpus fields across functional categories.
 
-\begin{table}[h]
+\begin{table}[H]
 \centering
 \begin{tabular}{lr}
 \toprule
@@ -87,7 +89,7 @@ The LLM enhancement process dramatically improved field completeness, particular
 
 The analysis reveals perfect coverage in search-critical fields, as shown in Table~\ref{tab:field-completeness}. Error codes, while incomplete at approximately 50\%, are not essential for retrieval functionality and serve primarily as reference metadata.
 
-\begin{table}[h]
+\begin{table}[H]
 \centering
 \begin{tabular}{lcc}
 \toprule
@@ -118,7 +120,7 @@ Categorical tags enable faceted search and filtering, crucial for narrowing larg
 
 Table~\ref{tab:tag-coverage} reveals significant fragmentation in categorical tags, with rule types showing 177 unique values despite covering only 73.7\% of the corpus.
 
-\begin{table}[h]
+\begin{table}[H]
 \centering
 \begin{tabular}{lccc}
 \toprule
@@ -138,7 +140,7 @@ Business Type & 36.5 & 128 & 4.28 \\
 
 Analysis reveals critical standardization needs:
 
-\textbf{Rule Type Fragmentation (177 unique values):}
+\paragraph{Rule Type Fragmentation (177 unique values):}
 \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
  \item ``Validation'' vs ``Validation Rule'' (360 rules affected) -- should be unified
  \item ``Data Enrichment'' vs ``Data Population'' (87 rules) -- unclear distinction
@@ -146,21 +148,21 @@ Analysis reveals critical standardization needs:
  \item \textbf{Recommendation}: Reduce to 15-20 standardized types
 \end{itemize}
 
-\textbf{Country Coverage Gaps (48.7\% coverage):}
+\paragraph{Country Coverage Gaps (48.7\% coverage):}
 \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
  \item 594 rules without country tags likely have geographic scope
  \item ISO country codes mixed with full names (needs ISO 3166 standardization)
  \item ``Global'' tag needed for universally applicable rules
 \end{itemize}
 
-\textbf{Business Type Under-specification (36.5\% coverage):}
+\paragraph{Business Type Under-specification (36.5\% coverage):}
 \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
  \item ``Payments'' too generic (214 rules need sub-categorization)
  \item 735 rules without business type severely limit filtering
  \item Overlapping categories need clear boundaries
 \end{itemize}
 
-\textbf{Party Agent Ambiguity (132 unique values):}
+\paragraph{Party Agent Ambiguity (132 unique values):}
 \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
  \item ``Counterparty'' vs ``Counterparty Bank'' distinction unclear
  \item Compound values indicate multi-party rules needing proper structure
@@ -171,7 +173,7 @@ Analysis reveals critical standardization needs:
 
 Text fields in the corpus vary significantly in coverage and length. The \texttt{llm\_description} field, generated offline using Gemini-2.5-Pro, provides substantially richer content than basic description fields. Table~\ref{tab:text-stats} summarizes these characteristics.
 
-\begin{table}[h]
+\begin{table}[H]
 \centering
 \begin{tabular}{lrrr}
 \toprule
@@ -254,7 +256,7 @@ The corpus achieves perfect embedding coverage with all 1,157 rules containing v
 
 Table~\ref{tab:similarity-stats} presents the pairwise cosine similarity statistics across all rule embeddings.
 
-\begin{table}[h]
+\begin{table}[H]
 \centering
 \begin{tabular}{lc}
 \toprule
@@ -356,7 +358,7 @@ Based on impact to retrieval quality and user experience:
 
 The corpus analysis reveals a high-quality dataset well-positioned for production deployment with targeted improvements needed in tag standardization.
 
-\textbf{Core Strengths:}
+\paragraph{Core Strengths:}
 \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
  \item Perfect coverage (100\%) in all search-critical fields enabling effective hybrid retrieval
  \item 4,239 unique keywords supporting BM25 retrieval (10\% hybrid weight)
@@ -367,7 +369,7 @@ The corpus analysis reveals a high-quality dataset well-positioned for productio
  \item Manually curated evaluation dataset with business analyst validation
 \end{itemize}
 
-\textbf{Priority Improvements:}
+\paragraph{Priority Improvements:}
 \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
  \item \textbf{Tag standardization}: Reduce fragmentation from 177 rule types and 128 business types to manageable taxonomies
  \item \textbf{Tag coverage}: Expand business type (36.5\%) and country (48.7\%) coverage to improve filtering

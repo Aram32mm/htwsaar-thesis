@@ -1,9 +1,9 @@
 \chapter{Introduction}\label{ch:introduction}
 
 \section{Background and Motivation}
-Modern payment platforms process millions of transactions daily, each subject to complex validation rules that protect customers, reduce operational risk, and ensure regulatory compliance. At Deutsche Bank's payment processing platform, these validation rules span from simple field validations (mandatory characters, allowed value sets) to intricate domain-specific constraints (country-specific limits, routing conditions, SWIFT/ISO message-format requirements). With hundreds of rules evolving continuously across distributed teams and systems, developers and quality assurance teams face a critical challenge: quickly finding and understanding the exact rules relevant to their current task.
+Modern payment platforms process millions of transactions daily, each subject to complex validation rules that protect customers, reduce operational risk, and ensure regulatory compliance. At Deutsche Bank's payment processing platforms, these validation rules span from simple field validations (mandatory characters, allowed value sets) to intricate domain-specific constraints (country-specific limits, routing conditions, SWIFT/ISO message-format requirements). With hundreds of rules evolving continuously across distributed teams and systems, developers and quality assurance teams face a critical challenge: quickly finding and understanding the exact rules relevant to their current task.
 
-Traditional keyword search fails this use case. Rules are described inconsistently across teams, terminology overlaps, and natural language queries rarely match the exact vocabulary in rule documentation. A developer asking about ``EUR cross-border limits'' might miss rules titled ``SEPA maximum amount validation'' despite their relevance. Moreover, rule data is often scattered across multiple systems, with inconsistent formats and outdated versions. Simultaneously, banking environments impose strict architectural constraints: no external API calls, limited infrastructure dependencies, and complete audit trails for all data access.
+Traditional keyword search fails this use case. Rules are described inconsistently across teams, terminology overlaps, and natural language queries rarely match the exact vocabulary in rule documentation. A developer asking about ``EUR cross-border limits'' might miss rules titled ``SEPA maximum amount validation'' despite their relevance. Moreover, rule data is often scattered across multiple systems, with inconsistent formats and outdated versions. Simultaneously, banking environments impose strict architectural constraints: no external unapproved API calls, limited infrastructure dependencies, and complete audit trails for all data access.
 
 \section{Problem Statement}
 \textbf{Goal.} Given a user query about a validation rule (e.g., ``EUR cross-border limit'' or ``party agent checks for DE''), the system should:
@@ -13,6 +13,7 @@ Traditional keyword search fails this use case. Rules are described inconsistent
  \item maintain sub-second response time for typical searches while operating within enterprise infrastructure constraints.
 \end{enumerate}
 
+\newpage
 \section{Approach Overview}
 This thesis presents a retrieval-augmented generation system that addresses these challenges through a hybrid retrieval architecture. The system combines three complementary signals—lexical matching, fuzzy string similarity, and semantic embeddings—with configurable weights optimized through empirical evaluation. The architecture follows a monolithic design pattern where all components operate within a single process, simplifying deployment and audit compliance.
 
@@ -22,14 +23,14 @@ The key innovation lies in comprehensive data standardization coupled with offli
 Each row in the standardized CSV represents one validation rule, consolidated from distributed sources and cleaned to ensure consistency:
 \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
  \item \textbf{Identifiers}: \textit{Rule ID, Rule Name} (deduplicated across sources).
- \item \textbf{Business descriptions}: \textit{English Description, German Description} (standardized terminology).
- \item \textbf{Error codes}: \textit{BANSTA Error Code, ISO Error Code} (validated against official registries).
- \item \textbf{LLM-enriched text}: \textit{LLM Generated Description} (created offline, used primarily for embedding generation).
- \item \textbf{Search fields}: \textit{Keywords} (curated terms), \textit{Tags} (Rule Type, Country, Business Type, Party Agent).
- \item \textbf{Metadata}: \textit{Relevance} (a rule-level score in $[0,1]$), \textit{Embedding} (JSON string with 1024 floats), \textit{Versioning}, \textit{Date}.
+ \item \textbf{Business descriptions}: \textit{Rule Description, Short English Description, Short German Description} (standardized terminology).
  \item \textbf{Implementation}: \textit{Rule Code} (the actual validation rule implementation).
+ \item \textbf{Error codes}: \textit{BANSTA Error Code, ISO Error Code} (per banking standards).
+ \item \textbf{LLM-generated fields}: \textit{LLM Description} (comprehensive text synthesizing rule purpose and logic), \textit{Keywords} (extracted distinctive search terms), \textit{Tags} (Rule Type, Country, Business Type, Party Agent scraped from available fields). All generated offline by Gemini-2.5-Pro.
+ \item \textbf{Embeddings}: 1024-dimensional vectors from \texttt{UAE-Large-V1} \cite{uae2023large}, computed from LLM descriptions, L2-normalized, stored as JSON strings in CSV.
 \end{itemize}
-Embeddings are produced with \texttt{UAE-Large-V1} \cite{uae2023large} (1024 dimensions, mean pooling), L2-normalized, and stored as JSON strings. The bilingual fields (EN/DE) support business users across teams while keeping a single source of truth. This standardization process resolved inconsistencies in naming conventions, merged duplicate rules, and established canonical representations for all fields.
+
+Additional metadata fields (\textit{Relevance} score $\in [0,1]$, \textit{Version}, \textit{Created/Updated} timestamps) are added at database ingestion but not stored in the CSV itself. This standardization process resolved inconsistencies in naming conventions, merged duplicate rules, and established canonical representations for all fields.
 
 \clearpage
 \section{System Overview}
@@ -86,14 +87,14 @@ label/.style={font=\scriptsize, text=gray!70}
 % Main vertical flow
 \node[datanode] (csv) at (0,0) {
 \textbf{Standardized CSV Corpus}\\
-\scriptsize BANSTA/ISO codes • Keywords • Tags\\
-\scriptsize 1024-d embeddings (JSON) • Bilingual descriptions
+\scriptsize Identifiers • Keywords • Tags\\
+\scriptsize 1024-d embeddings (JSON) • Descriptions
 };
 
 \node[processnode] (sqlite) at (0,-2) {
 \textbf{SQLite Database}\\
 \scriptsize Load CSV at startup\\
-\scriptsize Index rule IDs • Cache metadata
+\scriptsize Index rule IDs • Metadata fields
 };
 
 \node[processnode] (indices) at (0,-4) {
@@ -193,7 +194,7 @@ MRR@5: 48.2\%
 };
 
 \end{tikzpicture}
-\caption{Monolithic RAG architecture with vertical data flow. The system follows a clear pipeline from data ingestion at startup through query-time retrieval and ranking. Three retrieval signals (BM25, Fuzzy, Semantic) operate in parallel with empirically tuned weights from LOOCV evaluation. The relevance threshold filters low-confidence results regardless of retrieval mode. All components run in-process within a single Dash application.}\label{fig:intro-architecture}
+\caption{Monolithic RAG architecture. All components run in-process within a single Dash application, ensuring deterministic retrieval with sub-second latency.}\label{fig:intro-architecture}
 \end{figure}
 
 \begin{itemize}[leftmargin=*,itemsep=2pt,topsep=2pt]
@@ -202,7 +203,6 @@ MRR@5: 48.2\%
  \item \textbf{Ranking Layer}: Per-query score normalization, convex combination with tuned weights (0.10/0.10/0.80), followed by relevance threshold filtering at $\tau=0.30$ to exclude low-confidence results.
  \item \textbf{UI Layer}: Dash components for mode selection (Keyword/Hybrid), faceted filtering, ranked result cards displaying all available rule information including code implementation with tag badges, and grounded explanation panels rendered from stored fields.
 \end{itemize}
-
 \section{Retrieval Modes and Scoring}
 
 The system internally maintains three retrieval mechanisms (BM25, fuzzy matching, and semantic search) but exposes only two modes through the user interface: \textbf{Keyword mode}, which uses BM25 scoring alone, and \textbf{Hybrid mode}, which combines all three signals with learned weights. This design balances simplicity for users with comprehensive retrieval coverage.
@@ -215,23 +215,17 @@ For each candidate rule $r$ with keywords $K(r)$ and LLM description $D(r)$:
 \[
 s_{\text{kw}} = \mathrm{BM25}(q, K(r)),\quad s_{\text{fuzzy}} = \tfrac{1}{100}\,\mathrm{TokenSetRatio}(q, \mathrm{name}(r)),\quad s_{\text{sem}} = \cos\!\big(\phi(q), \psi(D(r))\big),
 \]
-where $\phi$ and $\psi$ are \texttt{UAE-Large-V1} encoders (1024-d, mean pooling). Scores are min–max normalized per query across the candidate pool to $[0,1]$. 
+where $\phi$ and $\psi$ are \texttt{UAE-Large-V1} encoders (1024-d, mean pooling). Scores are max-normalized per query across the candidate pool to $[0,1]$. 
 
 The final score is a convex combination with weights empirically tuned via Leave-One-Out Cross-Validation (LOOCV):
 \[
 s_{\text{hybrid}} = 0.10\,\widehat{s}_{\text{kw}} + 0.10\,\widehat{s}_{\text{fuzzy}} + 0.80\,\widehat{s}_{\text{sem}}
 \]
 
-We then apply a relevance threshold to filter low-confidence results across all modes:
-\[
-s_{\mathrm{final}} =
-\begin{cases}
-s_{\mathrm{mode}}, & \text{if } s_{\mathrm{mode}} \ge \tau,\\
-0,                 & \text{otherwise},
-\end{cases}
-\qquad \tau = 0.30.
-\]
-where $s_{\text{mode}}$ is either $s_{\text{kw}}$ for Keyword mode or $s_{\text{hybrid}}$ for Hybrid mode. These weights maximize Mean Reciprocal Rank at 5 (MRR@5) on our evaluation dataset (30 manually annotated query-rule pairs), improving from 43.4\% (initial weights) to 48.2\% (tuned weights). While the evaluation set is limited in size, each annotation was carefully validated to ensure high quality.
+\paragraph{Ranking and filtering.}
+Both modes apply identical post-processing: results are ranked by score (BM25 score for Keyword mode, hybrid score for Hybrid mode) and filtered using relevance threshold $\tau = 0.30$ to exclude low-confidence matches. Results below this threshold are removed regardless of retrieval mode.
+
+These weights maximize Mean Reciprocal Rank at 5 (MRR@5) on our evaluation dataset (30 manually annotated query-rule pairs), improving from 43.4\% (initial weights) to 48.2\% (tuned weights). While the evaluation set is limited in size, each annotation was carefully validated to ensure high quality.
 
 \paragraph{Why this design works.} 
 The hybrid approach balances precision and coverage:
@@ -275,16 +269,16 @@ The hybrid approach balances precision and coverage:
 
 The remainder of this thesis is organized into seven chapters:
 
-\textbf{Chapter~2: Related Work} positions this research within the existing literature on hybrid retrieval systems and rule discovery in financial compliance contexts. The chapter identifies critical gaps in current approaches, particularly the lack of unified retrieval systems for multilingual regulatory corpora.
+\paragraph{Chapter~2: Related Work} positions this research within the existing literature on hybrid retrieval systems and rule discovery in financial compliance contexts. The chapter identifies critical gaps in current approaches, particularly the lack of unified retrieval systems for multilingual regulatory corpora.
 
-\textbf{Chapter~3: Fundamentals} establishes the theoretical foundation of information retrieval techniques employed in this work. It covers BM25 scoring for sparse keyword matching, fuzzy string matching algorithms for approximate rule name search, dense embeddings using UAE-Large-V1 for semantic similarity, and the Retrieval-Augmented Generation (RAG) architectural pattern.
+\paragraph{Chapter~3: Fundamentals} establishes the theoretical foundation of information retrieval techniques employed in this work. It covers BM25 scoring for sparse keyword matching, fuzzy string matching algorithms for approximate rule name search, dense embeddings using UAE-Large-V1 for semantic similarity, and the Retrieval-Augmented Generation (RAG) architectural pattern.
 
-\textbf{Chapter~4: Corpus Analysis} provides a detailed examination of the standardized rule corpus post-consolidation. Analysis includes field completeness metrics, tag distribution patterns, embedding quality assessment, and identification of data challenges such as missing translations and sparse metadata.
+\paragraph{Chapter~4: Corpus Analysis} provides a detailed examination of the standardized rule corpus post-consolidation. Analysis includes field completeness metrics, tag distribution patterns, embedding quality assessment, and identification of data challenges such as missing translations and sparse metadata.
 
-\textbf{Chapter~5: System Design} presents the architectural decisions underlying the retrieval system. Core components include the hybrid scoring function with empirically-tuned weights, per-query score normalization strategy, SQLite database schema for efficient indexing, and the monolithic Dash application structure.
+\paragraph{Chapter~5: System Design} presents the architectural decisions underlying the retrieval system. Core components include the hybrid scoring function with empirically-tuned weights, per-query score normalization strategy, SQLite database schema for efficient indexing, and the monolithic Dash application structure.
 
-\textbf{Chapter~6: Implementation} details the Python codebase organization, startup initialization sequence, and engineering choices enabling efficient in-memory operation. The chapter emphasizes the deliberate avoidance of external dependencies in favor of self-contained functionality.
+\paragraph{Chapter~6: Implementation} details the Python codebase organization, startup initialization sequence, and engineering choices enabling efficient in-memory operation. The chapter emphasizes the deliberate avoidance of external dependencies in favor of self-contained functionality.
 
-\textbf{Chapter~7: Evaluation} reports comprehensive experimental results. Methodologies include Leave-One-Out Cross-Validation (LOOCV) for hyperparameter tuning, ablation studies isolating component contributions, and sensitivity analyses examining system robustness to parameter variations.
+\paragraph{Chapter~7: Evaluation} reports comprehensive experimental results. Methodologies include Leave-One-Out Cross-Validation (LOOCV) for hyperparameter tuning, ablation studies isolating component contributions, and sensitivity analyses examining system robustness to parameter variations.
 
-\textbf{Chapter~8: Conclusion} synthesizes the contributions, acknowledges limitations of the CSV-first approach, and proposes future research directions including graded relevance annotations, neural re-ranking models, and conversational interface development.
+\paragraph{Chapter~8: Conclusion} synthesizes the contributions, acknowledges limitations of the CSV-first approach, and proposes future research directions including graded relevance annotations, neural re-ranking models, and conversational interface development.

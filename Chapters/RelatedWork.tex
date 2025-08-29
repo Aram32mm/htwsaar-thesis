@@ -22,7 +22,7 @@ While Johnson et al. \cite{johnson2019billion} popularized FAISS for large-scale
 
 Early hybrid work by Kuzi et al. \cite{kuzi2020hybrid} demonstrated complementary signals between lexical and semantic methods. Lin and Ma \cite{lin2021pretrained} formalized this, showing simple linear combinations often outperform complex fusion. Their convex combination approach inspired our three-weight system.
 
-For score fusion, we chose min-max normalization over alternatives like reciprocal rank fusion \cite{cormack2009rrf} to preserve score magnitudes. Wang et al. \cite{wang2023improving} validated this approach for heterogeneous signals. While learning-to-rank methods exist \cite{liu2009learning,burges2005learning}, Qin et al. \cite{qin2021neural} found simple combinations competitive with limited training data—relevant given our 30 queries.
+For score fusion, we chose max normalization over alternatives like reciprocal rank fusion \cite{cormack2009rrf} to preserve relative score distributions while ensuring the highest score maps to 1.0. Wang et al. \cite{wang2023improving} validated this approach for heterogeneous signals. While learning-to-rank methods exist \cite{liu2009learning,burges2005learning}, Qin et al. \cite{qin2021neural} found simple combinations competitive with limited training data—relevant given our 30 queries.
 
 \subsection{Recent Neural Approaches}
 
